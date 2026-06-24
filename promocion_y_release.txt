@@ -1,0 +1,212 @@
+═══════════════════════════════════════════════════════════════
+  SHUTTLE CODEC — Texto promocional y guía de Release
+═══════════════════════════════════════════════════════════════
+
+
+╔══════════════════════════════════════════════════════════════╗
+║          1. DESCRIPCIÓN PARA VIDEOS (YouTube / TikTok)      ║
+╚══════════════════════════════════════════════════════════════╝
+
+TÍTULO:
+Shuttle Codec — Convierte videos con FFmpeg SIN terminal
+
+DESCRIPCIÓN:
+¿Cansado de escribir comandos de FFmpeg en la terminal?
+
+Shuttle Codec es una interfaz gráfica moderna que pone el poder 
+de FFmpeg al alcance de un clic. Arrastra tu video, elige tu 
+configuración y ¡listo!
+
+✨ Características:
+• Conversión a múltiples formatos: MP4, MKV, AVI, MOV, WebM
+• Procesamiento por lotes
+• Aceleración NVENC / AMD / Intel
+• Recorte de video
+• Modo experto con control total (CRF, resolución, FPS, codec)
+• Tema oscuro Catppuccin Mocha
+
+⬇️ Descarga gratis: https://github.com/jmarc9901/shuttle-codec
+#FFmpeg #VideoConverter #Python #OpenSource
+
+
+╔══════════════════════════════════════════════════════════════╗
+║           2. POST PARA REDES SOCIALES (Instagram, X,        ║
+║                     LinkedIn, Facebook)                      ║
+╚══════════════════════════════════════════════════════════════╝
+
+🚀 Shuttle Codec — La GUI definitiva para FFmpeg
+
+Convierte videos sin escribir un solo comando. Ideal para 
+creadores de contenido, developers y cualquiera que necesite 
+procesar videos rápido.
+
+✅ Múltiples formatos de video y audio
+✅ Lote: convierte varios archivos a la vez
+✅ Aceleración por hardware (NVENC, AMF, QSV)
+✅ Recorte, CRF, resolución, FPS...
+✅ Tema oscuro hermoso 🎨
+
+100% gratuito y open source.
+
+🔗 https://github.com/jmarc9901/shuttle-codec
+
+#FFmpeg #VideoConverter #Python #PyQt5 #OpenSource 
+#VideoEditing #ContentCreator #Windows #Catppuccin
+
+
+╔══════════════════════════════════════════════════════════════╗
+║           3. ARTÍCULO PARA MEDIUM                              ║
+╚══════════════════════════════════════════════════════════════╝
+
+TÍTULO:
+Shuttle Codec: Una GUI Moderna para FFmpeg en Python
+
+SUBTÍTULO:
+Convierte videos sin tocar la terminal. Open source, elegante 
+y potente.
+
+CUERPO:
+
+Si alguna vez has tenido que convertir un video de formato, 
+sabes que FFmpeg es la herramienta reina. Pero también sabes 
+que su interfaz de línea de comandos puede ser intimidante.
+
+Shuttle Codec nace para solucionar exactamente eso: una 
+interfaz gráfica escrita en Python con PyQt5 que expone todo 
+el poder de FFmpeg de forma intuitiva.
+
+¿Qué lo hace especial?
+
+1. Interfaz intuitiva
+Selecciona tu archivo, elige formato, resolución y calidad, 
+y deja que Shuttle Codec haga el resto.
+
+2. Detección automática
+Al cargar un archivo, Shuttle Codec analiza el códec de video, 
+resolución, bitrate y duración, y sugiere automáticamente la 
+mejor configuración.
+
+3. Procesamiento por lotes
+¿Tienes 20 videos para convertir? Agrégolos todos a la lista 
+de lote y conviértelos con la misma configuración en una sola 
+operación.
+
+4. Aceleración por hardware
+Si tienes una GPU NVIDIA (NVENC), AMD (AMF) o Intel (QSV), 
+la app lo detecta automáticamente y te permite usarla para 
+acelerar la codificación.
+
+5. Control experto cuando lo necesitas
+Activa el modo experto y tendrás control total sobre CRF, 
+preset de codificación, resolución, FPS, códec de audio, 
+y más.
+
+6. Tema oscuro hermoso
+Inspirado en Catppuccin Mocha, la interfaz es agradable a la 
+vista durante sesiones largas de trabajo.
+
+Tecnologías usadas:
+- Python 3.11
+- PyQt5 para la interfaz gráfica
+- FFmpeg como motor de conversión (embebido en el ejecutable)
+- PyInstaller para empaquetar
+
+El proyecto es 100% open source bajo licencia MIT y está 
+disponible en GitHub.
+
+⬇️ Descárgalo aquí: https://github.com/jmarc9901/shuttle-codec
+
+
+╔══════════════════════════════════════════════════════════════╗
+║     4. GUÍA: CÓMO CREAR EL RELEASE EN GITHUB                ║
+╚══════════════════════════════════════════════════════════════╝
+
+PASO 1 — Commitear todo y pushear
+──────────────────────────────────
+Abre una terminal en la carpeta del proyecto y ejecuta:
+
+    git add .
+    git commit -m "v1.0.0: Release inicial - fixed QTime bug + icono"
+    git push origin main
+
+PASO 2 — Crear un Tag de versión
+──────────────────────────────────
+    git tag v1.0.0
+    git push origin v1.0.0
+
+PASO 3 — Ir a GitHub y crear el Release
+──────────────────────────────────────────
+1. Abre https://github.com/jmarc9901/shuttle-codec
+2. Haz clic en "Releases" (en la barra lateral derecha)
+3. Haz clic en "Create a new release" o "Draft a new release"
+4. En "Tag version", selecciona "v1.0.0"
+5. En "Release title", escribe:  v1.0.0 - Lanzamiento inicial 🚀
+6. En la descripción, pega esto:
+
+---
+🚀 Shuttle Codec v1.0.0
+
+Primera versión pública de Shuttle Codec, una interfaz gráfica 
+moderna para FFmpeg.
+
+✅ Qué incluye:
+- Conversión a múltiples formatos (MP4, MKV, AVI, MOV, WebM...)
+- Procesamiento por lote
+- Aceleración por hardware (NVENC, AMF, QSV)
+- Recorte de video
+- Modo experto con control completo (CRF, resolución, FPS...)
+- Tema oscuro Catppuccin Mocha
+- Atajos de teclado
+
+📥 Descarga:
+shuttle-codec.exe — Ejecutable portátil (~140 MB, incluye FFmpeg)
+
+🖥️ Requisitos: Windows 10/11 (64-bit) — No requiere instalación
+
+🔧 Para desarrolladores:
+git clone https://github.com/jmarc9901/shuttle-codec.git
+cd shuttle-codec
+pip install -r requirements.txt
+python src/main.py
+---
+
+7. Arrastra el archivo dist\shuttle-codec.exe a la sección 
+   "Attach binaries" (puede tardar un rato, son ~140 MB)
+
+8. Haz clic en "Publish release"
+
+¡Listo! El release está publicado y cualquiera puede descargar 
+el ejecutable desde GitHub.
+
+
+╔══════════════════════════════════════════════════════════════╗
+║     5. PREPARAR EL REPO EN GITHUB (PRIMERA VEZ)             ║
+╚══════════════════════════════════════════════════════════════╝
+
+Si es la primera vez que subes este proyecto:
+
+    git remote add origin https://github.com/jmarc9901/shuttle-codec.git
+    git branch -M main
+    git push -u origin main
+
+El repo ya está configurado con remote "origin" apuntando a
+https://github.com/jmarc9901/shuttle-codec.git
+
+Archivos que debe tener el repositorio:
+✅ README.md        — Documentación principal
+✅ LICENSE          — Licencia MIT
+✅ logo.png         — Icono de la app
+✅ requirements.txt — Dependencias
+✅ pyproject.toml   — Configuración del proyecto
+✅ build.py         — Script de compilación
+✅ download_ffmpeg.py — Descarga FFmpeg
+✅ src/             — Código fuente
+
+Archivos que NO deben estar (están en .gitignore):
+❌ __pycache__/
+❌ dist/
+❌ build/
+❌ *.spec
+❌ *.pyc
+
+═══════════════════════════════════════════════════════════════
