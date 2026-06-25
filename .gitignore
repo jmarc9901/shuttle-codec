@@ -206,6 +206,9 @@ tempCodeRunnerFile.py
 # Ruff stuff:
 .ruff_cache/
 
+# Promotional files
+promocion_y_release.txt
+
 # PyPI configuration file
 .pypirc
 
