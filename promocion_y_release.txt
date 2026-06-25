@@ -150,7 +150,6 @@ Primera versión pública de Shuttle Codec, una interfaz gráfica
 moderna para FFmpeg.
 
 ✅ Qué incluye:
-- Conversión a múltiples formatos (MP4, MKV, AVI, MOV, WebM...)
 - Procesamiento por lote
 - Aceleración por hardware (NVENC, AMF, QSV)
 - Recorte de video
