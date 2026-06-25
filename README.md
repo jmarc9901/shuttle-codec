@@ -88,13 +88,6 @@ El ejecutable estará en `dist/shuttle-codec.exe`.
 3. Opcional: agrega más archivos al lote, activa recorte o modo experto
 4. Haz clic en **Iniciar conversión**
 
----
-
-## 📸 Capturas
-
-*(Agrega aquí capturas de pantalla de la interfaz)*
-
-Tema oscuro Catppuccin Mocha con interfaz limpia y moderna.
 
 ---
 
