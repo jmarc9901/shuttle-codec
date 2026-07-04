@@ -137,7 +137,7 @@ class MainWindow(QMainWindow):
     # ─── UI INIT ────────────────────────────────────────────────────────────────
     def init_ui(self):
         self.setWindowTitle("Shuttle Codec")
-        self.setMinimumSize(1100, 800)
+        self.setMinimumSize(900, 600)
         self.setAcceptDrops(True)
         self.setWindowIcon(QIcon(_get_icon_path()))
 
@@ -171,7 +171,11 @@ class MainWindow(QMainWindow):
         left_layout.setContentsMargins(0, 0, 0, 0)
         self._create_video_section(left_layout)
         self._create_trim_section(left_layout)
-        content_splitter.addWidget(left_widget)
+        left_scroll = QScrollArea()
+        left_scroll.setWidget(left_widget)
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setFrameShape(QFrame.NoFrame)
+        content_splitter.addWidget(left_scroll)
 
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
@@ -453,12 +457,11 @@ class MainWindow(QMainWindow):
 
         browse_btn = QPushButton("📁 Examinar")
         browse_btn.clicked.connect(self.browse_file)
-        browse_btn.setFixedWidth(120)
         file_layout.addWidget(browse_btn)
 
         self.clear_btn = QPushButton("✕")
         self.clear_btn.clicked.connect(self.clear_file)
-        self.clear_btn.setFixedWidth(40)
+        self.clear_btn.setFixedWidth(36)
         file_layout.addWidget(self.clear_btn)
 
         layout.addWidget(file_frame)
@@ -505,7 +508,6 @@ class MainWindow(QMainWindow):
         self.expert_btn.setObjectName("btnExpert")
         self.expert_btn.setCheckable(True)
         self.expert_btn.clicked.connect(self._toggle_mode)
-        self.expert_btn.setFixedHeight(30)
         toggle_layout.addWidget(self.expert_btn)
         toggle_layout.addStretch()
 
@@ -519,7 +521,6 @@ class MainWindow(QMainWindow):
         row1.addWidget(QLabel("Formato:"))
         self.video_format = QComboBox()
         self.video_format.addItems(self.ffmpeg.get_supported_video_formats())
-        self.video_format.setMinimumWidth(200)
         self.video_format.currentIndexChanged.connect(self._on_video_format_change)
         row1.addWidget(self.video_format)
         row1.addStretch()
@@ -543,10 +544,9 @@ class MainWindow(QMainWindow):
         self.video_crf = QSlider(Qt.Horizontal)
         self.video_crf.setRange(0, 51)
         self.video_crf.setValue(23)
-        self.video_crf.setFixedWidth(250)
-        row3.addWidget(self.video_crf)
+        row3.addWidget(self.video_crf, 1)
         self.video_crf_label = QLabel("23")
-        self.video_crf_label.setFixedWidth(30)
+        self.video_crf_label.setStyleSheet("min-width: 30px;")
         self.video_crf.valueChanged.connect(lambda v: self.video_crf_label.setText(str(v)))
         row3.addWidget(self.video_crf_label)
 
@@ -686,17 +686,14 @@ class MainWindow(QMainWindow):
         btn_row = QHBoxLayout()
         add_batch = QPushButton("➕ Agregar a lote")
         add_batch.clicked.connect(self._add_to_batch)
-        add_batch.setFixedHeight(30)
         btn_row.addWidget(add_batch)
 
         remove_batch = QPushButton("➖ Quitar selección")
         remove_batch.clicked.connect(self._remove_from_batch)
-        remove_batch.setFixedHeight(30)
         btn_row.addWidget(remove_batch)
 
         clear_batch = QPushButton("🗑 Limpiar")
         clear_batch.clicked.connect(self._clear_batch)
-        clear_batch.setFixedHeight(30)
         btn_row.addWidget(clear_batch)
 
         batch_layout.addLayout(btn_row)
@@ -754,7 +751,6 @@ class MainWindow(QMainWindow):
 
         self.log_output = QTextEdit()
         self.log_output.setReadOnly(True)
-        self.log_output.setMaximumHeight(120)
         log_layout.addWidget(self.log_output)
 
         layout.addWidget(log_group)
