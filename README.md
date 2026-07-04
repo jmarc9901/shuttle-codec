@@ -6,7 +6,7 @@
   <img src="logo.png" alt="Shuttle Codec Logo" width="128"/>
 </p>
 
-> Convierte cualquier archivo de video con solo arrastrar y soltar. Soporta lote, aceleración por hardware NVENC, recorte de video y modo experto. Tema oscuro estilo Catppuccin Mocha. 🎨⚡
+> Convierte cualquier archivo de video con solo arrastrar y soltar. Soporta lote, aceleración por hardware NVENC, recorte de video, conversión a GIF y modo experto. Tema oscuro estilo Catppuccin Mocha. 🎨⚡
 
 ---
 
@@ -17,9 +17,10 @@
 - **Arrastra y suelta**: Soporta múltiples archivos a la vez
 - **Atajos de teclado**: Ctrl+O (abrir), Ctrl+E (convertir), Ctrl+Q (salir), Delete (quitar)
 - **Detección automática**: Al cargar un video analiza códec, resolución y sugiere la configuración óptima
+- **Panel de información**: Codecs, resolución, tamaño y duración visibles siempre al cargar un archivo
 
 ### ⚡ Potentes
-- **Conversión de video**: MP4 (H.264/H.265), MKV, AVI, MOV, WebM
+- **Conversión de video**: MP4 (H.264/H.265), MKV, AVI, MOV, WebM, **GIF**
 - **Conversión de audio**: MP3, AAC, WAV, FLAC, OGG, M4A, WMA
 - **Procesamiento por lotes**: Convierte múltiples archivos con la misma configuración
 - **Recorte de video**: Selecciona inicio y fin para recortar segmentos específicos
