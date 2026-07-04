@@ -1,4 +1,4 @@
-# 🚀 Shuttle Codec
+# Shuttle Codec
 
 **Una GUI moderna, elegante y potente para FFmpeg** — Convierte videos sin escribir un solo comando.
 
@@ -6,38 +6,40 @@
   <img src="logo.png" alt="Shuttle Codec Logo" width="128"/>
 </p>
 
-> Convierte cualquier archivo de video con solo arrastrar y soltar. Soporta lote, aceleración por hardware NVENC, recorte de video, conversión a GIF y modo experto. Tema oscuro estilo Catppuccin Mocha. 🎨⚡
+> Convierte cualquier archivo de video con solo arrastrar y soltar. Soporta lote, aceleracion por hardware NVENC, recorte de video, conversion a GIF y modo experto. Tema oscuro estilo Catppuccin Mocha. Interfaz responsive adaptable a cualquier tamano de pantalla.
 
 ---
 
-## ✨ Características principales
+## Caracteristicas principales
 
-### 🎯 Fáciles de usar
+### Faciles de usar
 - **Modo Simple/Experto**: Por defecto modo simple (solo formato), toggle para opciones avanzadas
-- **Arrastra y suelta**: Soporta múltiples archivos a la vez
+- **Arrastra y suelta**: Soporta multiples archivos a la vez
 - **Atajos de teclado**: Ctrl+O (abrir), Ctrl+E (convertir), Ctrl+Q (salir), Delete (quitar)
-- **Detección automática**: Al cargar un video analiza códec, resolución y sugiere la configuración óptima
-- **Panel de información**: Codecs, resolución, tamaño y duración visibles siempre al cargar un archivo
+- **Deteccion automatica**: Al cargar un video analiza codec, resolucion y sugiere la configuracion optima
+- **Panel de informacion**: Codecs, resolucion, tamano y duracion visibles siempre al cargar un archivo
+- **Responsive**: La interfaz se adapta a cualquier tamano de ventana con scroll automatico
 
-### ⚡ Potentes
-- **Conversión de video**: MP4 (H.264/H.265), MKV, AVI, MOV, WebM, **GIF**
-- **Conversión de audio**: MP3, AAC, WAV, FLAC, OGG, M4A, WMA
-- **Procesamiento por lotes**: Convierte múltiples archivos con la misma configuración
-- **Recorte de video**: Selecciona inicio y fin para recortar segmentos específicos
-- **Aceleración por hardware**: Detecta automáticamente NVENC (NVIDIA), AMF (AMD) o QSV (Intel)
-- **Control fino**: CRF, preset de codificación, resolución, FPS, códec de audio y más
+### Potentes
+- **Conversion de video**: MP4 (H.264/H.265), MKV, AVI, MOV, WebM, **GIF**
+- **Conversion de audio**: MP3, AAC, WAV, FLAC, OGG, M4A, WMA
+- **Procesamiento por lotes**: Convierte multiples archivos con la misma configuracion
+- **Conversion a GIF**: Genera GIFs optimizados con palette optimizada (palettegen + paletteuse)
+- **Recorte de video**: Selecciona inicio y fin para recortar segmentos especificos (duracion en tiempo real)
+- **Aceleracion por hardware**: Detecta automaticamente NVENC (NVIDIA), AMF (AMD) o QSV (Intel)
+- **Control fino**: CRF, preset de codificacion, resolucion, FPS, codec de audio y mas
 
-### 📊 Informativas
-- **ETA y velocidad**: Tiempo restante estimado y velocidad durante la conversión
-- **Info del archivo**: Codecs, resolución, bitrate, duración al cargar
-- **Persistencia**: Recuerda tamaño/posición de ventana y últimas configuraciones
+### Informativas
+- **ETA y velocidad**: Tiempo restante estimado y velocidad durante la conversion
+- **Info del archivo**: Codecs, resolucion, bitrate, duracion al cargar
+- **Persistencia**: Recuerda tamano/posicion de ventana y ultimas configuraciones
 - **Log detallado**: Registro completo de todas las operaciones
 
 ---
 
-## 🛠️ Tecnologías
+## Tecnologias
 
-| Capa | Tecnología |
+| Capa | Tecnologia |
 |------|-----------|
 | Lenguaje | Python 3.11 |
 | GUI | PyQt5 |
@@ -47,12 +49,12 @@
 
 ---
 
-## 📦 Requisitos
+## Requisitos
 
 - **Para usar el ejecutable**: Windows 10/11 (64-bit)
 - **Para desarrollo**: Python 3.8+
 
-## 🔧 Instalación (desarrolladores)
+## Instalacion (desarrolladores)
 
 ```bash
 # Clonar repositorio
@@ -62,17 +64,19 @@ cd shuttle-codec
 # Instalar dependencias
 pip install -r requirements.txt
 
+# Descargar FFmpeg (solo primera vez)
+python download_ffmpeg.py
+
 # Ejecutar
 python -m src.main
 ```
 
-## 🏗️ Compilar ejecutable (con FFmpeg embebido)
+## Compilar ejecutable (con FFmpeg embebido)
 
-El ejecutable incluye FFmpeg y FFprobe, **sin necesidad de descargarlos aparte**.
+El ejecutable incluye FFmpeg y FFprobe, **sin necesidad de descargarlos aparte** si ya los tienes en `resources/bin/`.
 
 ```bash
 # 1. Descargar FFmpeg (solo primera vez)
-pip install py7zr
 python download_ffmpeg.py
 
 # 2. Compilar
@@ -80,21 +84,20 @@ pip install pyinstaller
 python build.py
 ```
 
-El ejecutable estará en `dist/shuttle-codec.exe`.
+El ejecutable estara en `dist/shuttle-codec.exe`.
 
-## 🎯 Cómo usar
+## Como usar
 
 1. Abre la app o arrastra un archivo
-2. Configura formato, resolución, calidad y demás opciones
-3. Opcional: agrega más archivos al lote, activa recorte o modo experto
-4. Haz clic en **Iniciar conversión**
-
+2. Configura formato, resolucion, calidad y demas opciones
+3. Opcional: agrega mas archivos al lote, activa recorte o modo GIF
+4. Haz clic en **Iniciar conversion**
 
 ---
 
-## 📄 Licencia
+## Licencia
 
-Apache 2.0 — Con atribución y protección de patentes.
+Apache 2.0 — Con atribucion y proteccion de patentes.
 
 ---
 

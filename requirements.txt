@@ -1,3 +1,2 @@
 PyQt5>=5.15.0
-py7zr>=0.20.0
 PyInstaller>=6.0.0
