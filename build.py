@@ -89,9 +89,9 @@ def check_ffmpeg():
         print(f"ERROR: {ffprobe} not found!")
         return False
     size_mb = os.path.getsize(ffmpeg) / 1024 / 1024
-    print(f"  ✓ ffmpeg.exe ({size_mb:.1f} MB)")
+    print(f"  [OK] ffmpeg.exe ({size_mb:.1f} MB)")
     size_mb = os.path.getsize(ffprobe) / 1024 / 1024
-    print(f"  ✓ ffprobe.exe ({size_mb:.1f} MB)")
+    print(f"  [OK] ffprobe.exe ({size_mb:.1f} MB)")
     return True
 
 
@@ -99,7 +99,7 @@ def write_spec():
     """Write the spec file with FFmpeg paths."""
     with open(SPEC_FILE, "w") as f:
         f.write(SPEC_TEMPLATE)
-    print(f"  ✓ Created {SPEC_FILE}")
+    print(f"  [OK] Created {SPEC_FILE}")
 
 
 def build():
@@ -128,13 +128,13 @@ def build():
         if os.path.isfile(dist_path):
             size_mb = os.path.getsize(dist_path) / 1024 / 1024
             print(f"\n{'='*50}")
-            print(f"  ✅ BUILD SUCCESSFUL!")
-            print(f"  📦 {dist_path} ({size_mb:.1f} MB)")
+            print(f"  [SUCCESS] Build completed!")
+            print(f"  Output: {dist_path} ({size_mb:.1f} MB)")
             print(f"{'='*50}")
         else:
-            print(f"\n⚠️  Build completed but {dist_path} not found?")
+            print(f"\n[WARNING] Build completed but {dist_path} not found?")
     else:
-        print(f"\n❌ Build failed with code {result}")
+        print(f"\n[ERROR] Build failed with code {result}")
         sys.exit(1)
 
 

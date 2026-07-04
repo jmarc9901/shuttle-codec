@@ -134,6 +134,7 @@ class FFmpegHandler:
             "presets": ["ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"],
             "quality_range": (0, 51),
             "default_crf": 23,
+            "gif_mode": False,
         },
         "MP4 (H.265)": {
             "video_codec": "libx265",
@@ -141,6 +142,7 @@ class FFmpegHandler:
             "presets": ["ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"],
             "quality_range": (0, 51),
             "default_crf": 28,
+            "gif_mode": False,
         },
         "AVI": {
             "video_codec": "libx264",
@@ -148,6 +150,7 @@ class FFmpegHandler:
             "presets": ["ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"],
             "quality_range": (0, 51),
             "default_crf": 23,
+            "gif_mode": False,
         },
         "MKV (H.264)": {
             "video_codec": "libx264",
@@ -155,6 +158,7 @@ class FFmpegHandler:
             "presets": ["ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"],
             "quality_range": (0, 51),
             "default_crf": 23,
+            "gif_mode": False,
         },
         "WebM (VP9)": {
             "video_codec": "libvpx-vp9",
@@ -162,6 +166,7 @@ class FFmpegHandler:
             "presets": ["ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"],
             "quality_range": (0, 63),
             "default_crf": 31,
+            "gif_mode": False,
         },
         "MOV": {
             "video_codec": "libx264",
@@ -169,6 +174,15 @@ class FFmpegHandler:
             "presets": ["ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"],
             "quality_range": (0, 51),
             "default_crf": 23,
+            "gif_mode": False,
+        },
+        "GIF": {
+            "video_codec": "gif",
+            "extension": ".gif",
+            "presets": [],
+            "quality_range": (1, 100),
+            "default_crf": 50,
+            "gif_mode": True,
         },
     }
 
@@ -183,6 +197,8 @@ class FFmpegHandler:
     }
 
     def _get_hw_encoder(self, fmt_name):
+        if fmt_name == "GIF":
+            return None
         self._load_encoders_cache()
         encoders = self._encoders_cache or ""
         if "H.264" in fmt_name or "MP4" in fmt_name or "AVI" in fmt_name or "MKV" in fmt_name or "MOV" in fmt_name:
@@ -214,43 +230,50 @@ class FFmpegHandler:
             if not fmt:
                 return None
 
-            use_hw = settings.get("hw_accel", False)
-            if use_hw:
-                hw_encoder = self._get_hw_encoder(settings["format"])
-                if hw_encoder:
-                    cmd.extend(["-c:v", hw_encoder])
-                    if "nvenc" in hw_encoder:
-                        cmd.extend(["-cq", str(settings.get("crf", 23))])
-                    elif "amf" in hw_encoder:
-                        cmd.extend(["-quality", "balanced"])
-                    elif "qsv" in hw_encoder:
-                        cmd.extend(["-global_quality", str(settings.get("crf", 23))])
+            if fmt.get("gif_mode"):
+                fps = settings.get("framerate") or "10"
+                res = settings.get("resolution")
+                scale_filter = f"scale={res}:flags=lanczos" if res else "scale=-1:-1"
+                vf = f"fps={fps},{scale_filter},split[s0][s1];[s0]palettegen=max_colors=256[p];[s1][p]paletteuse=dither=bayer"
+                cmd.extend(["-vf", vf, "-loop", "0", "-an"])
+            else:
+                use_hw = settings.get("hw_accel", False)
+                if use_hw:
+                    hw_encoder = self._get_hw_encoder(settings["format"])
+                    if hw_encoder:
+                        cmd.extend(["-c:v", hw_encoder])
+                        if "nvenc" in hw_encoder:
+                            cmd.extend(["-cq", str(settings.get("crf", 23))])
+                        elif "amf" in hw_encoder:
+                            cmd.extend(["-quality", "balanced"])
+                        elif "qsv" in hw_encoder:
+                            cmd.extend(["-global_quality", str(settings.get("crf", 23))])
+                    else:
+                        cmd.extend(["-c:v", fmt["video_codec"]])
+                        if settings.get("crf") is not None:
+                            cmd.extend(["-crf", str(settings["crf"])])
+                        if settings.get("preset"):
+                            cmd.extend(["-preset", settings["preset"]])
                 else:
                     cmd.extend(["-c:v", fmt["video_codec"]])
                     if settings.get("crf") is not None:
                         cmd.extend(["-crf", str(settings["crf"])])
                     if settings.get("preset"):
                         cmd.extend(["-preset", settings["preset"]])
-            else:
-                cmd.extend(["-c:v", fmt["video_codec"]])
-                if settings.get("crf") is not None:
-                    cmd.extend(["-crf", str(settings["crf"])])
-                if settings.get("preset"):
-                    cmd.extend(["-preset", settings["preset"]])
 
-            if settings.get("resolution"):
-                cmd.extend(["-vf", f"scale={settings['resolution']}"])
-            if settings.get("framerate"):
-                cmd.extend(["-r", str(settings["framerate"])])
+                if settings.get("resolution"):
+                    cmd.extend(["-vf", f"scale={settings['resolution']}"])
+                if settings.get("framerate"):
+                    cmd.extend(["-r", str(settings["framerate"])])
 
-            if settings.get("keep_audio", True):
-                acodec = settings.get("audio_codec", "aac")
-                cmd.extend(["-c:a", acodec])
-                abitrate = settings.get("audio_bitrate", "192k")
-                if abitrate and abitrate != "auto":
-                    cmd.extend(["-b:a", abitrate])
-            else:
-                cmd.extend(["-an"])
+                if settings.get("keep_audio", True):
+                    acodec = settings.get("audio_codec", "aac")
+                    cmd.extend(["-c:a", acodec])
+                    abitrate = settings.get("audio_bitrate", "192k")
+                    if abitrate and abitrate != "auto":
+                        cmd.extend(["-b:a", abitrate])
+                else:
+                    cmd.extend(["-an"])
 
         elif mode == "audio":
             fmt = self.AUDIO_FORMATS.get(settings["format"])
@@ -340,3 +363,27 @@ class FFmpegHandler:
 
     def get_supported_audio_formats(self):
         return list(self.AUDIO_FORMATS.keys())
+
+    def get_file_summary(self, file_path):
+        info = self.get_media_info(file_path)
+        if not info:
+            return None
+        codecs = self.get_codecs(file_path)
+        width, height = self.get_resolution(file_path)
+        duration = None
+        bitrate = None
+        if info and "format" in info:
+            duration = float(info["format"].get("duration", 0))
+            bitrate = info["format"].get("bit_rate", None)
+        size_mb = os.path.getsize(file_path) / 1024 / 1024
+        return {
+            "filename": os.path.basename(file_path),
+            "size_mb": size_mb,
+            "video_codec": codecs.get("video"),
+            "audio_codec": codecs.get("audio"),
+            "width": width,
+            "height": height,
+            "duration": duration,
+            "duration_str": self.get_duration_string(duration) if duration else "00:00:00",
+            "bitrate": int(bitrate) // 1000 if bitrate else None,
+        }

@@ -157,6 +157,9 @@ class MainWindow(QMainWindow):
         self._create_file_section(top_layout)
         main_layout.addWidget(top_widget)
 
+        # File info panel
+        self._create_info_panel(main_layout)
+
         # Mode toggle
         self._create_mode_toggle(main_layout)
 
@@ -460,6 +463,40 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(file_frame)
 
+    def _create_info_panel(self, layout):
+        self.info_frame = QFrame()
+        self.info_frame.setObjectName("infoPanel")
+        self.info_frame.setVisible(False)
+        info_layout = QHBoxLayout(self.info_frame)
+        info_layout.setContentsMargins(8, 4, 8, 4)
+
+        self.info_name = QLabel("")
+        self.info_name.setStyleSheet("color: #cdd6f4; font-size: 12px; font-weight: bold;")
+        info_layout.addWidget(self.info_name)
+        info_layout.addSpacing(16)
+
+        self.info_size = QLabel("")
+        self.info_size.setStyleSheet("color: #a6adc8; font-size: 12px;")
+        info_layout.addWidget(self.info_size)
+        info_layout.addSpacing(16)
+
+        self.info_video = QLabel("")
+        self.info_video.setStyleSheet("color: #89b4fa; font-size: 12px;")
+        info_layout.addWidget(self.info_video)
+        info_layout.addSpacing(16)
+
+        self.info_audio = QLabel("")
+        self.info_audio.setStyleSheet("color: #a6e3a1; font-size: 12px;")
+        info_layout.addWidget(self.info_audio)
+        info_layout.addSpacing(16)
+
+        self.info_duration = QLabel("")
+        self.info_duration.setStyleSheet("color: #f9e2af; font-size: 12px;")
+        info_layout.addWidget(self.info_duration)
+        info_layout.addStretch()
+
+        layout.addWidget(self.info_frame)
+
     def _create_mode_toggle(self, layout):
         toggle_layout = QHBoxLayout()
         toggle_layout.setContentsMargins(0, 0, 0, 0)
@@ -582,14 +619,20 @@ class MainWindow(QMainWindow):
     def _on_video_format_change(self, index):
         fmt_name = self.video_format.currentText()
         fmt = self.ffmpeg.VIDEO_FORMATS.get(fmt_name)
-        if fmt:
-            self.video_preset.clear()
+        if not fmt:
+            return
+        is_gif = fmt.get("gif_mode", False)
+        self.video_preset.clear()
+        if fmt["presets"]:
             self.video_preset.addItems(fmt["presets"])
             self.video_preset.setCurrentText("medium")
-            self.video_crf.setRange(fmt["quality_range"][0], fmt["quality_range"][1])
-            self.video_crf.setValue(fmt["default_crf"])
-            self.video_crf_label.setText(str(fmt["default_crf"]))
-            self._update_crf_info(fmt["default_crf"])
+        self.video_preset.setVisible(not is_gif)
+        self.video_crf.setRange(fmt["quality_range"][0], fmt["quality_range"][1])
+        self.video_crf.setValue(fmt["default_crf"])
+        self.video_crf_label.setText(str(fmt["default_crf"]))
+        self._update_crf_info(fmt["default_crf"])
+        self.video_keep_audio.setVisible(not is_gif)
+        self.hw_check.setVisible(False)
 
     def _create_trim_section(self, layout):
         trim_group = QGroupBox("✂ Recorte (opcional)")
@@ -841,6 +884,7 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(0)
         self.eta_label.setText("")
         self.speed_label.setText("")
+        self.info_frame.setVisible(False)
 
     def load_file(self, file_path):
         self.input_file = file_path
@@ -850,7 +894,20 @@ class MainWindow(QMainWindow):
         self.log_output.clear()
         self.progress_bar.setValue(0)
 
-        # Show file info
+        summary = self.ffmpeg.get_file_summary(file_path)
+        if summary:
+            self.info_name.setText(f"📄 {summary['filename']}")
+            self.info_size.setText(f"📦 {summary['size_mb']:.1f} MB")
+            vcodec = summary.get('video_codec') or "-"
+            res = f"{summary['width']}x{summary['height']}" if summary.get('width') else ""
+            self.info_video.setText(f"🎬 {vcodec.upper() if vcodec != '-' else '-'} {res}")
+            acodec = summary.get('audio_codec') or "-"
+            self.info_audio.setText(f"🎵 {acodec.upper() if acodec != '-' else '-'}")
+            bitrate_str = f" · {summary['bitrate']} kbps" if summary.get('bitrate') else ""
+            self.info_duration.setText(f"⏱ {summary['duration_str']}{bitrate_str}")
+            self.info_frame.setVisible(True)
+
+        # Show file info in log too
         codecs = self.ffmpeg.get_codecs(file_path)
         width, height = self.ffmpeg.get_resolution(file_path)
         duration = None
@@ -977,7 +1034,6 @@ class MainWindow(QMainWindow):
         return start_s, end_s - start_s
 
     def _get_settings_from_ui(self):
-        """Get current video settings from UI."""
         fmt_name = self.video_format.currentText()
         fmt = self.ffmpeg.VIDEO_FORMATS.get(fmt_name)
         resolution = self.video_resolution.currentText()
@@ -991,13 +1047,14 @@ class MainWindow(QMainWindow):
             "640x360 (360p)": "640:360",
         }
         fps = self.video_fps.currentText()
+        is_gif = fmt.get("gif_mode", False) if fmt else False
         settings = {
             "format": fmt_name,
             "crf": self.video_crf.value(),
-            "preset": self.video_preset.currentText(),
+            "preset": self.video_preset.currentText() if fmt and fmt["presets"] else "",
             "resolution": res_map.get(resolution),
             "framerate": None if fps == "Original" else fps,
-            "keep_audio": self.video_keep_audio.isChecked(),
+            "keep_audio": self.video_keep_audio.isChecked() if not is_gif else False,
             "audio_codec": "aac",
             "audio_bitrate": "192k",
             "hw_accel": self.hw_check.isChecked() if self.hw_check.isVisible() else False,
