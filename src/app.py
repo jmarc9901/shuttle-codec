@@ -167,6 +167,10 @@ class MainWindow(QMainWindow):
         content_splitter = QSplitter(Qt.Horizontal)
 
         left_widget = QWidget()
+        left_widget.setAutoFillBackground(True)
+        pal = left_widget.palette()
+        pal.setColor(left_widget.backgroundRole(), QColor("#1e1e2e"))
+        left_widget.setPalette(pal)
         left_layout = QVBoxLayout(left_widget)
         left_layout.setContentsMargins(0, 0, 0, 0)
         self._create_video_section(left_layout)
@@ -175,6 +179,10 @@ class MainWindow(QMainWindow):
         left_scroll.setWidget(left_widget)
         left_scroll.setWidgetResizable(True)
         left_scroll.setFrameShape(QFrame.NoFrame)
+        left_scroll.viewport().setAutoFillBackground(True)
+        pal2 = left_scroll.viewport().palette()
+        pal2.setColor(left_scroll.viewport().backgroundRole(), QColor("#1e1e2e"))
+        left_scroll.viewport().setPalette(pal2)
         content_splitter.addWidget(left_scroll)
 
         right_widget = QWidget()
@@ -403,6 +411,42 @@ class MainWindow(QMainWindow):
                 border: 1px solid #313244;
                 border-radius: 8px;
                 padding: 8px;
+            }
+            QScrollArea {
+                background-color: #1e1e2e;
+                border: none;
+            }
+            QScrollBar:vertical {
+                background-color: #1e1e2e;
+                width: 10px;
+                border: none;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #45475a;
+                border-radius: 5px;
+                min-height: 30px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background-color: #585b70;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+            QScrollBar:horizontal {
+                background-color: #1e1e2e;
+                height: 10px;
+                border: none;
+            }
+            QScrollBar::handle:horizontal {
+                background-color: #45475a;
+                border-radius: 5px;
+                min-width: 30px;
+            }
+            QScrollBar::handle:horizontal:hover {
+                background-color: #585b70;
+            }
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+                width: 0px;
             }
         """)
 
