@@ -598,11 +598,13 @@ class MainWindow(QMainWindow):
         trim_layout.addWidget(QLabel("Inicio:"))
         self.trim_start = QTimeEdit(QTime(0, 0, 0))
         self.trim_start.setDisplayFormat("HH:mm:ss")
+        self.trim_start.timeChanged.connect(self._update_trim_duration)
         trim_layout.addWidget(self.trim_start)
 
         trim_layout.addWidget(QLabel("Fin:"))
         self.trim_end = QTimeEdit(QTime(0, 0, 0))
         self.trim_end.setDisplayFormat("HH:mm:ss")
+        self.trim_end.timeChanged.connect(self._update_trim_duration)
         trim_layout.addWidget(self.trim_end)
 
         trim_layout.addWidget(QLabel("Duración:"))
@@ -615,6 +617,19 @@ class MainWindow(QMainWindow):
 
         trim_layout.addStretch()
         layout.addWidget(trim_group)
+
+    def _update_trim_duration(self):
+        start = self.trim_start.time()
+        end = self.trim_end.time()
+        start_s = start.hour() * 3600 + start.minute() * 60 + start.second()
+        end_s = end.hour() * 3600 + end.minute() * 60 + end.second()
+        if end_s > start_s:
+            diff = end_s - start_s
+            self.trim_duration.setText(f"{diff // 3600:02d}:{(diff % 3600) // 60:02d}:{diff % 60:02d}")
+            self.trim_duration.setStyleSheet("color: #a6e3a1; font-weight: bold; font-size: 13px;")
+        else:
+            self.trim_duration.setText("00:00:00")
+            self.trim_duration.setStyleSheet("color: #f38ba8; font-weight: bold; font-size: 13px;")
 
     def _create_batch_section(self, layout):
         batch_group = QGroupBox("📦 Lista de lote")
@@ -924,12 +939,13 @@ class MainWindow(QMainWindow):
         self.batch_items.append((file_path, None))  # output_path set later
         item = QListWidgetItem(os.path.basename(file_path))
         item.setToolTip(file_path)
+        item.setData(Qt.UserRole, os.path.basename(file_path))
         self.batch_list.addItem(item)
         self._update_batch_ui()
 
     def _remove_from_batch(self):
-        for item in self.batch_list.selectedItems():
-            row = self.batch_list.row(item)
+        rows = sorted([self.batch_list.row(item) for item in self.batch_list.selectedItems()], reverse=True)
+        for row in rows:
             if row < len(self.batch_items):
                 self.batch_items.pop(row)
             self.batch_list.takeItem(row)
@@ -990,9 +1006,11 @@ class MainWindow(QMainWindow):
         return "video", settings
 
     def _build_output_path(self, input_path):
-        """Build output file path based on input."""
+        fmt_name = self.video_format.currentText()
+        fmt = self.ffmpeg.VIDEO_FORMATS.get(fmt_name)
+        ext = fmt["extension"] if fmt else ".mp4"
         base, _ = os.path.splitext(input_path)
-        return f"{base}_convertido.mp4"
+        return f"{base}_convertido{ext}"
 
     def start_conversion(self):
         if not self.ffmpeg.check_ffmpeg():
@@ -1067,10 +1085,10 @@ class MainWindow(QMainWindow):
         self.batch_progress.setValue(index + 1)
         status = "✅" if success else "❌"
         self.log_output.append(f"  {status} [{index+1}/{self.batch_progress.maximum()}] {os.path.basename(outpath)}")
-        # Update list item
         item = self.batch_list.item(index)
         if item:
-            item.setText(f"{'✅' if success else '❌'} {item.text()}")
+            name = item.data(Qt.UserRole) or os.path.basename(outpath)
+            item.setText(f"{status} {name}")
 
     def _on_batch_all_finished(self):
         self.convert_btn.setEnabled(True)
@@ -1125,11 +1143,10 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage(f"❌ Falló: {description}")
 
     def cancel_conversion(self):
-        if self.current_thread and self.current_thread.isRunning():
+        if self.ffmpeg:
             self.ffmpeg.cancel_conversion()
-            self.log_output.append("⏹ Conversión cancelada.")
-            self.current_thread.wait()
-            self._on_conversion_finished(False, "Cancelado", "")
+        self.log_output.append("⏹ Conversión cancelada.")
+        self._on_conversion_finished(False, "Cancelado", "")
         # Also cancel batch
         if self.batch_manager.queue:
             self.batch_manager.cancel()

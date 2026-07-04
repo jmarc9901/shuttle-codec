@@ -210,9 +210,9 @@ tempCodeRunnerFile.py
 promocion_y_release.txt
 
 # Downloaded FFmpeg binaries (use download_ffmpeg.py)
-/resources/bin/ffmpeg.exe
-/resources/bin/ffprobe.exe
-/resources/bin/ffmpeg-master-latest-win64-gpl/
+resources/bin/ffmpeg.exe
+resources/bin/ffprobe.exe
+resources/bin/ffmpeg-master-latest-win64-gpl/
 
 # PyPI configuration file
 .pypirc

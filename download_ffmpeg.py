@@ -4,8 +4,8 @@ import os
 import sys
 import zipfile
 import ssl
+import shutil
 
-# Use the BtbN GitHub release (ZIP) which is more reliable
 url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
 
 target_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources", "bin")
@@ -14,7 +14,6 @@ os.makedirs(target_dir, exist_ok=True)
 print(f"Downloading FFmpeg from GitHub...")
 print("URL: " + url)
 
-# Create SSL context that doesn't verify (fixes some corporate proxy issues)
 ctx = ssl.create_default_context()
 ctx.check_hostname = False
 ctx.verify_mode = ssl.CERT_NONE
@@ -25,7 +24,6 @@ req = urllib.request.Request(url, headers={
 })
 
 try:
-    # First try HEAD request to get file size
     req.method = "HEAD"
     resp = urllib.request.urlopen(req, context=ctx, timeout=30)
     total = int(resp.headers.get("content-length", 0))
@@ -61,6 +59,7 @@ print("Extracting ZIP...")
 
 buffer.seek(0)
 extracted = 0
+extracted_dirs = set()
 with zipfile.ZipFile(buffer) as zf:
     for member in zf.namelist():
         if member.endswith("ffmpeg.exe") or member.endswith("ffprobe.exe"):
@@ -71,7 +70,14 @@ with zipfile.ZipFile(buffer) as zf:
                 os.remove(dst)
             os.rename(src, dst)
             extracted += 1
+            extracted_dirs.add(os.path.dirname(os.path.join(target_dir, member)))
             print(f"  Extracted: {os.path.basename(member)}")
+
+# Clean up extracted subdirectories
+for d in extracted_dirs:
+    if os.path.isdir(d):
+        shutil.rmtree(d, ignore_errors=True)
+        print(f"  Cleaned up: {os.path.relpath(d, target_dir)}")
 
 if extracted == 2:
     print("\nSUCCESS: FFmpeg and FFprobe extracted correctly!")

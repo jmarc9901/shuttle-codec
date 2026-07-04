@@ -3,6 +3,7 @@ import subprocess
 import json
 import re
 import time
+import threading
 
 from .ffmpeg_downloader import find_ffmpeg
 
@@ -12,6 +13,8 @@ class FFmpegHandler:
         self.ffmpeg_path = "ffmpeg"
         self.ffprobe_path = "ffprobe"
         self._process = None
+        self._hw_cache = None
+        self._encoders_cache = None
         self._try_detect()
 
     def _try_detect(self):
@@ -92,31 +95,37 @@ class FFmpegHandler:
                 return stream.get("width"), stream.get("height")
         return None, None
 
-    def detect_hardware_acceleration(self):
-        """Detect available hardware acceleration encoders."""
+    def _load_encoders_cache(self):
+        if self._encoders_cache is not None:
+            return
         if not self.check_ffmpeg():
-            return ""
+            self._encoders_cache = ""
+            return
         try:
             result = subprocess.run(
                 [self.ffmpeg_path, "-encoders"],
                 capture_output=True, text=True, timeout=10
             )
-            encoders = result.stdout
-            # Check for NVENC
-            if "h264_nvenc" in encoders or "hevc_nvenc" in encoders:
-                return "NVENC (NVIDIA)"
-            # Check for AMF (AMD)
-            if "h264_amf" in encoders or "hevc_amf" in encoders:
-                return "AMF (AMD)"
-            # Check for QSV (Intel)
-            if "h264_qsv" in encoders or "hevc_qsv" in encoders:
-                return "QSV (Intel)"
-            # Check for VideoToolbox (macOS)
-            if "h264_videotoolbox" in encoders:
-                return "VideoToolbox (Apple)"
+            self._encoders_cache = result.stdout
         except:
-            pass
-        return ""
+            self._encoders_cache = ""
+
+    def detect_hardware_acceleration(self):
+        if self._hw_cache is not None:
+            return self._hw_cache
+        self._load_encoders_cache()
+        encoders = self._encoders_cache or ""
+        if "h264_nvenc" in encoders or "hevc_nvenc" in encoders:
+            self._hw_cache = "NVENC (NVIDIA)"
+        elif "h264_amf" in encoders or "hevc_amf" in encoders:
+            self._hw_cache = "AMF (AMD)"
+        elif "h264_qsv" in encoders or "hevc_qsv" in encoders:
+            self._hw_cache = "QSV (Intel)"
+        elif "h264_videotoolbox" in encoders:
+            self._hw_cache = "VideoToolbox (Apple)"
+        else:
+            self._hw_cache = ""
+        return self._hw_cache
 
     VIDEO_FORMATS = {
         "MP4 (H.264)": {
@@ -174,36 +183,28 @@ class FFmpegHandler:
     }
 
     def _get_hw_encoder(self, fmt_name):
-        """Get hardware encoder if available for the given format."""
-        try:
-            result = subprocess.run(
-                [self.ffmpeg_path, "-encoders"],
-                capture_output=True, text=True, timeout=5
-            )
-            encoders = result.stdout
-            if "H.264" in fmt_name or "MP4" in fmt_name:
-                if "h264_nvenc" in encoders:
-                    return "h264_nvenc"
-                if "h264_amf" in encoders:
-                    return "h264_amf"
-                if "h264_qsv" in encoders:
-                    return "h264_qsv"
-            if "H.265" in fmt_name or "HEVC" in fmt_name:
-                if "hevc_nvenc" in encoders:
-                    return "hevc_nvenc"
-                if "hevc_amf" in encoders:
-                    return "hevc_amf"
-                if "hevc_qsv" in encoders:
-                    return "hevc_qsv"
-        except:
-            pass
+        self._load_encoders_cache()
+        encoders = self._encoders_cache or ""
+        if "H.264" in fmt_name or "MP4" in fmt_name or "AVI" in fmt_name or "MKV" in fmt_name or "MOV" in fmt_name:
+            if "h264_nvenc" in encoders:
+                return "h264_nvenc"
+            if "h264_amf" in encoders:
+                return "h264_amf"
+            if "h264_qsv" in encoders:
+                return "h264_qsv"
+        if "H.265" in fmt_name or "HEVC" in fmt_name:
+            if "hevc_nvenc" in encoders:
+                return "hevc_nvenc"
+            if "hevc_amf" in encoders:
+                return "hevc_amf"
+            if "hevc_qsv" in encoders:
+                return "hevc_qsv"
         return None
 
     def build_convert_command(self, input_file, output_file, mode, settings,
                               trim_start=None, trim_duration=None):
         cmd = [self.ffmpeg_path, "-i", input_file]
 
-        # Trim (must be before output options)
         if trim_start is not None and trim_duration is not None:
             cmd.extend(["-ss", str(trim_start)])
             cmd.extend(["-t", str(trim_duration)])
@@ -213,13 +214,11 @@ class FFmpegHandler:
             if not fmt:
                 return None
 
-            # Check for HW acceleration
             use_hw = settings.get("hw_accel", False)
             if use_hw:
                 hw_encoder = self._get_hw_encoder(settings["format"])
                 if hw_encoder:
                     cmd.extend(["-c:v", hw_encoder])
-                    # NVENC uses different quality params
                     if "nvenc" in hw_encoder:
                         cmd.extend(["-cq", str(settings.get("crf", 23))])
                     elif "amf" in hw_encoder:
@@ -228,20 +227,20 @@ class FFmpegHandler:
                         cmd.extend(["-global_quality", str(settings.get("crf", 23))])
                 else:
                     cmd.extend(["-c:v", fmt["video_codec"]])
-                    if "crf" in settings and settings["crf"] is not None:
+                    if settings.get("crf") is not None:
                         cmd.extend(["-crf", str(settings["crf"])])
-                    if "preset" in settings and settings["preset"]:
+                    if settings.get("preset"):
                         cmd.extend(["-preset", settings["preset"]])
             else:
                 cmd.extend(["-c:v", fmt["video_codec"]])
-                if "crf" in settings and settings["crf"] is not None:
+                if settings.get("crf") is not None:
                     cmd.extend(["-crf", str(settings["crf"])])
-                if "preset" in settings and settings["preset"]:
+                if settings.get("preset"):
                     cmd.extend(["-preset", settings["preset"]])
 
-            if "resolution" in settings and settings["resolution"]:
+            if settings.get("resolution"):
                 cmd.extend(["-vf", f"scale={settings['resolution']}"])
-            if "framerate" in settings and settings["framerate"]:
+            if settings.get("framerate"):
                 cmd.extend(["-r", str(settings["framerate"])])
 
             if settings.get("keep_audio", True):
@@ -258,17 +257,17 @@ class FFmpegHandler:
             if not fmt:
                 return None
             cmd.extend(["-vn", "-c:a", fmt["audio_codec"]])
-            if "bitrate" in settings and settings["bitrate"] and settings["bitrate"] != "auto":
+            if settings.get("bitrate") and settings["bitrate"] != "auto":
                 cmd.extend(["-b:a", settings["bitrate"]])
-            if "sample_rate" in settings and settings["sample_rate"]:
+            if settings.get("sample_rate"):
                 cmd.extend(["-ar", str(settings["sample_rate"])])
-            if "channels" in settings and settings["channels"]:
+            if settings.get("channels"):
                 cmd.extend(["-ac", str(settings["channels"])])
 
         elif mode == "extract_audio":
             acodec = settings.get("audio_codec", "libmp3lame")
             cmd.extend(["-vn", "-c:a", acodec])
-            if "bitrate" in settings and settings["bitrate"] and settings["bitrate"] != "auto":
+            if settings.get("bitrate") and settings["bitrate"] != "auto":
                 cmd.extend(["-b:a", settings["bitrate"]])
 
         cmd.extend(["-y", output_file])
@@ -277,49 +276,48 @@ class FFmpegHandler:
     def start_conversion(self, cmd, progress_callback=None, eta_callback=None):
         self._process = subprocess.Popen(
             cmd,
-            stdout=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
-            universal_newlines=True,
-            bufsize=1
+            universal_newlines=True
         )
 
         duration = None
         start_time = time.time()
-        last_current = 0
-        last_update = time.time()
 
         time_pattern = re.compile(r"time=(\d+):(\d+):(\d+\.\d+)")
         duration_pattern = re.compile(r"Duration: (\d+):(\d+):(\d+\.\d+)")
-        fps_pattern = re.compile(r"fps=\s*(\d+\.?\d*)")
-        speed_pattern = re.compile(r"speed=\s*(\d+\.?\d*)x")
 
-        for line in self._process.stderr:
-            if duration is None:
-                dur_match = duration_pattern.search(line)
-                if dur_match:
-                    h, m, s = dur_match.groups()
-                    duration = int(h) * 3600 + int(m) * 60 + float(s)
+        def read_stderr():
+            nonlocal duration
+            for line in self._process.stderr:
+                if duration is None:
+                    dur_match = duration_pattern.search(line)
+                    if dur_match:
+                        h, m, s = dur_match.groups()
+                        duration = int(h) * 3600 + int(m) * 60 + float(s)
 
-            time_match = time_pattern.search(line)
-            if time_match and duration and duration > 0:
-                h, m, s = time_match.groups()
-                current = int(h) * 3600 + int(m) * 60 + float(s)
-                now = time.time()
+                time_match = time_pattern.search(line)
+                if time_match and duration and duration > 0:
+                    h, m, s = time_match.groups()
+                    current = int(h) * 3600 + int(m) * 60 + float(s)
+                    now = time.time()
 
-                # Progress
-                progress = int((current / duration) * 100)
-                if progress_callback:
-                    progress_callback(min(progress, 100))
+                    progress = int((current / duration) * 100)
+                    if progress_callback:
+                        progress_callback(min(progress, 100))
 
-                # ETA calculation
-                elapsed = now - start_time
-                if current > 0 and elapsed > 2:
-                    speed = current / elapsed
-                    remaining = (duration - current) / speed if speed > 0 else 0
-                    eta_str = f"{int(remaining // 60)}m {int(remaining % 60):02d}s"
-                    speed_str = f"{speed:.1f}x"
-                    if eta_callback:
-                        eta_callback(eta_str, speed_str)
+                    elapsed = now - start_time
+                    if current > 0 and elapsed > 2:
+                        speed = current / elapsed
+                        remaining = (duration - current) / speed if speed > 0 else 0
+                        eta_str = f"{int(remaining // 60)}m {int(remaining % 60):02d}s"
+                        speed_str = f"{speed:.1f}x"
+                        if eta_callback:
+                            eta_callback(eta_str, speed_str)
+
+        reader = threading.Thread(target=read_stderr, daemon=True)
+        reader.start()
+        reader.join()
 
         self._process.wait()
         if progress_callback:
