@@ -1,3 +1,6 @@
+# Copyright 2026 jmarc9901
+# SPDX-License-Identifier: Apache-2.0
+
 import os
 import sys
 import time
