@@ -1,6 +1,6 @@
 [project]
 name = "shuttle-codec"
-version = "1.0.0"
+version = "1.1.0"
 description = "Una GUI de escritorio moderna y fácil de usar para FFmpeg"
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -9,8 +9,23 @@ dependencies = [
     "PyQt5>=5.15.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]
+build = [
+    "pyinstaller>=6.0",
+]
+
 [project.scripts]
 shuttle-codec = "src.main:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
 
 [build-system]
 requires = ["setuptools>=68.0"]

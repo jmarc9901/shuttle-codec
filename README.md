@@ -6,6 +6,27 @@
   <img src="logo.png" alt="Shuttle Codec Logo" width="128"/>
 </p>
 
+<p align="center">
+  <a href="https://github.com/jmarc9901/shuttle-codec/blob/main/LICENSE">
+    <img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License">
+  </a>
+  <a href="https://www.python.org/downloads/">
+    <img src="https://img.shields.io/badge/python-3.8%2B-blue" alt="Python">
+  </a>
+  <a href="https://github.com/jmarc9901/shuttle-codec/actions">
+    <img src="https://img.shields.io/github/actions/workflow/status/jmarc9901/shuttle-codec/ci.yml?branch=main&label=CI" alt="CI">
+  </a>
+  <a href="https://github.com/jmarc9901/shuttle-codec">
+    <img src="https://img.shields.io/github/stars/jmarc9901/shuttle-codec?style=flat&label=Stars" alt="Stars">
+  </a>
+  <a href="https://github.com/jmarc9901/shuttle-codec/releases">
+    <img src="https://img.shields.io/github/v/release/jmarc9901/shuttle-codec" alt="Release">
+  </a>
+  <a href="https://github.com/jmarc9901/shuttle-codec/blob/main/CONTRIBUTING.md">
+    <img src="https://img.shields.io/badge/contributions-welcome-brightgreen" alt="Contributions">
+  </a>
+</p>
+
 > Convierte cualquier archivo de video con solo arrastrar y soltar. Soporta lote, aceleracion por hardware NVENC, recorte de video, conversion a GIF y modo experto. Tema oscuro estilo Catppuccin Mocha. Interfaz responsive adaptable a cualquier tamano de pantalla.
 
 ---
@@ -19,6 +40,7 @@
 - **Deteccion automatica**: Al cargar un video analiza codec, resolucion y sugiere la configuracion optima
 - **Panel de informacion**: Codecs, resolucion, tamano y duracion visibles siempre al cargar un archivo
 - **Responsive**: La interfaz se adapta a cualquier tamano de ventana con scroll automatico
+- **🌐 Internacionalizacion**: Interfaz en Español e Ingles, seleccionable desde la cabecera
 
 ### Potentes
 - **Conversion de video**: MP4 (H.264/H.265), MKV, AVI, MOV, WebM, **GIF**
@@ -32,7 +54,7 @@
 ### Informativas
 - **ETA y velocidad**: Tiempo restante estimado y velocidad durante la conversion
 - **Info del archivo**: Codecs, resolucion, bitrate, duracion al cargar
-- **Persistencia**: Recuerda tamano/posicion de ventana y ultimas configuraciones
+- **Persistencia**: Recuerda tamano/posicion de ventana, idioma y ultimas configuraciones
 - **Log detallado**: Registro completo de todas las operaciones
 
 ---
@@ -41,11 +63,46 @@
 
 | Capa | Tecnologia |
 |------|-----------|
-| Lenguaje | Python 3.11 |
+| Lenguaje | Python 3.11+ |
 | GUI | PyQt5 |
 | Motor de video | FFmpeg (embebido) |
 | Empaquetado | PyInstaller |
 | Tema | Catppuccin Mocha |
+| Testing | pytest + unittest.mock |
+
+---
+
+## Mejoras recientes (v1.1.0)
+
+### 🔒 Seguridad
+- SSL verification activada en descarga de FFmpeg (eliminado `CERT_NONE`)
+- Validacion de rutas con `os.path.realpath()` para evitar path traversal
+- Validacion de archivos multimedia (tamano, existencia, tipo) antes de procesar
+- Manejo seguro de subprocesos con timeouts
+
+### 🎯 Tipado y calidad
+- Type hints en absolutamente todas las funciones y metodos
+- Hinting de tipos de retorno y parametros en toda la codebase
+- Reorganizacion de imports y eliminacion de imports no utilizados
+
+### 🌐 Internacionalizacion
+- Sistema completo de traducciones (i18n) con soporte Español/Ingles
+- 100+ strings traducidas en ambos idiomas
+- Selector de idioma en la cabecera de la aplicacion
+- Persistencia del idioma seleccionado entre sesiones
+
+### 🧪 Testing
+- Suite de 37 tests unitarios que cubren:
+  - `ffmpeg_handler.py`: 22 tests (comandos, formatos, hardware, resolucion de rutas)
+  - `ffmpeg_downloader.py`: 8 tests (busqueda de binarios, bundled vs system)
+  - `i18n.py`: 7 tests (traducciones, cambios de idioma, keys faltantes)
+- Tests ejecutables con `python -m pytest tests/`
+
+### 💡 UX/UI
+- Tooltips descriptivos en todos los controles
+- Validacion de archivos con mensajes de error claros
+- Estados vacios correctamente manejados
+- Selector de idioma directamente en la cabecera
 
 ---
 
@@ -86,12 +143,44 @@ python build.py
 
 El ejecutable estara en `dist/shuttle-codec.exe`.
 
+## Ejecutar tests
+
+```bash
+pip install pytest
+python -m pytest tests/ -v
+```
+
 ## Como usar
 
 1. Abre la app o arrastra un archivo
 2. Configura formato, resolucion, calidad y demas opciones
 3. Opcional: agrega mas archivos al lote, activa recorte o modo GIF
 4. Haz clic en **Iniciar conversion**
+5. Cambia el idioma desde el selector en la esquina superior derecha
+
+---
+
+## Estructura del proyecto
+
+```
+shuttle-codec/
+├── src/
+│   ├── __init__.py
+│   ├── main.py              # Punto de entrada
+│   ├── app.py               # UI principal (PyQt5)
+│   ├── ffmpeg_handler.py     # Logica FFmpeg/FFprobe
+│   ├── ffmpeg_downloader.py  # Localizacion de binarios
+│   └── i18n.py              # Traducciones ES/EN
+├── tests/
+│   ├── test_i18n.py
+│   ├── test_ffmpeg_handler.py
+│   └── test_ffmpeg_downloader.py
+├── resources/bin/           # Binarios FFmpeg embebidos
+├── download_ffmpeg.py       # Descarga FFmpeg desde GitHub
+├── build.py                 # Build con PyInstaller
+├── pyproject.toml
+└── requirements.txt
+```
 
 ---
 

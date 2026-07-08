@@ -4,26 +4,30 @@ import json
 import re
 import time
 import threading
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from .ffmpeg_downloader import find_ffmpeg
 
+ProgressCallback = Callable[[int, str], None]
+EtaCallback = Callable[[str, str], None]
+
 
 class FFmpegHandler:
-    def __init__(self):
-        self.ffmpeg_path = "ffmpeg"
-        self.ffprobe_path = "ffprobe"
-        self._process = None
-        self._hw_cache = None
-        self._encoders_cache = None
+    def __init__(self) -> None:
+        self.ffmpeg_path: str = "ffmpeg"
+        self.ffprobe_path: str = "ffprobe"
+        self._process: Optional[subprocess.Popen] = None
+        self._hw_cache: Optional[str] = None
+        self._encoders_cache: Optional[str] = None
         self._try_detect()
 
-    def _try_detect(self):
+    def _try_detect(self) -> None:
         ffmpeg, ffprobe = find_ffmpeg()
         if ffmpeg and ffprobe:
             self.ffmpeg_path = ffmpeg
             self.ffprobe_path = ffprobe
 
-    def check_ffmpeg(self):
+    def check_ffmpeg(self) -> bool:
         try:
             result = subprocess.run(
                 [self.ffmpeg_path, "-version"],
@@ -33,7 +37,7 @@ class FFmpegHandler:
         except (FileNotFoundError, subprocess.TimeoutExpired):
             return False
 
-    def check_ffprobe(self):
+    def check_ffprobe(self) -> bool:
         try:
             result = subprocess.run(
                 [self.ffprobe_path, "-version"],
@@ -43,15 +47,22 @@ class FFmpegHandler:
         except (FileNotFoundError, subprocess.TimeoutExpired):
             return False
 
-    def get_media_info(self, file_path):
-        if not os.path.exists(file_path):
+    def _resolve_path(self, file_path: str) -> Optional[str]:
+        resolved = os.path.realpath(file_path)
+        if os.path.isfile(resolved):
+            return resolved
+        return None
+
+    def get_media_info(self, file_path: str) -> Optional[Dict[str, Any]]:
+        resolved = self._resolve_path(file_path)
+        if not resolved:
             return None
 
         cmd = [
             self.ffprobe_path, "-v", "quiet",
             "-print_format", "json",
             "-show_format", "-show_streams",
-            file_path
+            resolved
         ]
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
@@ -61,7 +72,8 @@ class FFmpegHandler:
         except (json.JSONDecodeError, subprocess.TimeoutExpired, FileNotFoundError):
             return None
 
-    def get_duration_string(self, seconds):
+    @staticmethod
+    def get_duration_string(seconds: Optional[float]) -> str:
         if seconds is None:
             return "00:00:00"
         h = int(seconds // 3600)
@@ -69,14 +81,14 @@ class FFmpegHandler:
         s = int(seconds % 60)
         return f"{h:02d}:{m:02d}:{s:02d}"
 
-    def get_codecs(self, file_path):
+    def get_codecs(self, file_path: str) -> Dict[str, Optional[str]]:
         info = self.get_media_info(file_path)
         if not info:
             return {"video": None, "audio": None}
 
-        codecs = {"video": None, "audio": None}
-        streams = info.get("streams", [])
-        if streams is None:
+        codecs: Dict[str, Optional[str]] = {"video": None, "audio": None}
+        streams = info.get("streams")
+        if not streams:
             return codecs
         for stream in streams:
             codec_type = stream.get("codec_type")
@@ -85,7 +97,7 @@ class FFmpegHandler:
                 codecs[codec_type] = codec_name
         return codecs
 
-    def get_resolution(self, file_path):
+    def get_resolution(self, file_path: str) -> Tuple[Optional[int], Optional[int]]:
         info = self.get_media_info(file_path)
         if not info:
             return None, None
@@ -95,7 +107,7 @@ class FFmpegHandler:
                 return stream.get("width"), stream.get("height")
         return None, None
 
-    def _load_encoders_cache(self):
+    def _load_encoders_cache(self) -> None:
         if self._encoders_cache is not None:
             return
         if not self.check_ffmpeg():
@@ -107,10 +119,10 @@ class FFmpegHandler:
                 capture_output=True, text=True, timeout=10
             )
             self._encoders_cache = result.stdout
-        except:
+        except Exception:
             self._encoders_cache = ""
 
-    def detect_hardware_acceleration(self):
+    def detect_hardware_acceleration(self) -> str:
         if self._hw_cache is not None:
             return self._hw_cache
         self._load_encoders_cache()
@@ -127,7 +139,7 @@ class FFmpegHandler:
             self._hw_cache = ""
         return self._hw_cache
 
-    VIDEO_FORMATS = {
+    VIDEO_FORMATS: Dict[str, Dict[str, Any]] = {
         "MP4 (H.264)": {
             "video_codec": "libx264",
             "extension": ".mp4",
@@ -186,7 +198,7 @@ class FFmpegHandler:
         },
     }
 
-    AUDIO_FORMATS = {
+    AUDIO_FORMATS: Dict[str, Dict[str, Any]] = {
         "MP3": {"audio_codec": "libmp3lame", "extension": ".mp3", "bitrates": ["128k", "192k", "256k", "320k"]},
         "AAC": {"audio_codec": "aac", "extension": ".aac", "bitrates": ["128k", "192k", "256k", "320k"]},
         "WAV": {"audio_codec": "pcm_s16le", "extension": ".wav", "bitrates": ["1411k"]},
@@ -196,7 +208,7 @@ class FFmpegHandler:
         "WMA": {"audio_codec": "wmav2", "extension": ".wma", "bitrates": ["128k", "192k", "256k", "320k"]},
     }
 
-    def _get_hw_encoder(self, fmt_name):
+    def _get_hw_encoder(self, fmt_name: str) -> Optional[str]:
         if fmt_name == "GIF":
             return None
         self._load_encoders_cache()
@@ -217,9 +229,20 @@ class FFmpegHandler:
                 return "hevc_qsv"
         return None
 
-    def build_convert_command(self, input_file, output_file, mode, settings,
-                              trim_start=None, trim_duration=None):
-        cmd = [self.ffmpeg_path, "-i", input_file]
+    def build_convert_command(
+        self,
+        input_file: str,
+        output_file: str,
+        mode: str,
+        settings: Dict[str, Any],
+        trim_start: Optional[Union[int, float]] = None,
+        trim_duration: Optional[Union[int, float]] = None,
+    ) -> Optional[List[str]]:
+        resolved_input = self._resolve_path(input_file)
+        if not resolved_input:
+            return None
+
+        cmd: List[str] = [self.ffmpeg_path, "-i", resolved_input]
 
         if trim_start is not None and trim_duration is not None:
             cmd.extend(["-ss", str(trim_start)])
@@ -296,7 +319,12 @@ class FFmpegHandler:
         cmd.extend(["-y", output_file])
         return cmd
 
-    def start_conversion(self, cmd, progress_callback=None, eta_callback=None):
+    def start_conversion(
+        self,
+        cmd: List[str],
+        progress_callback: Optional[ProgressCallback] = None,
+        eta_callback: Optional[EtaCallback] = None,
+    ) -> bool:
         self._process = subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
@@ -304,15 +332,18 @@ class FFmpegHandler:
             universal_newlines=True
         )
 
-        duration = None
+        duration: Optional[float] = None
         start_time = time.time()
 
         time_pattern = re.compile(r"time=(\d+):(\d+):(\d+\.\d+)")
         duration_pattern = re.compile(r"Duration: (\d+):(\d+):(\d+\.\d+)")
 
-        def read_stderr():
+        def read_stderr() -> None:
             nonlocal duration
-            for line in self._process.stderr:
+            proc = self._process
+            if proc is None or proc.stderr is None:
+                return
+            for line in proc.stderr:
                 if duration is None:
                     dur_match = duration_pattern.search(line)
                     if dur_match:
@@ -327,7 +358,7 @@ class FFmpegHandler:
 
                     progress = int((current / duration) * 100)
                     if progress_callback:
-                        progress_callback(min(progress, 100))
+                        progress_callback(min(progress, 100), "")
 
                     elapsed = now - start_time
                     if current > 0 and elapsed > 2:
@@ -344,11 +375,11 @@ class FFmpegHandler:
 
         self._process.wait()
         if progress_callback:
-            progress_callback(100)
+            progress_callback(100, "")
 
         return self._process.returncode == 0
 
-    def cancel_conversion(self):
+    def cancel_conversion(self) -> bool:
         if self._process and self._process.poll() is None:
             self._process.terminate()
             try:
@@ -358,23 +389,25 @@ class FFmpegHandler:
             return True
         return False
 
-    def get_supported_video_formats(self):
+    def get_supported_video_formats(self) -> List[str]:
         return list(self.VIDEO_FORMATS.keys())
 
-    def get_supported_audio_formats(self):
+    def get_supported_audio_formats(self) -> List[str]:
         return list(self.AUDIO_FORMATS.keys())
 
-    def get_file_summary(self, file_path):
+    def get_file_summary(self, file_path: str) -> Optional[Dict[str, Any]]:
         info = self.get_media_info(file_path)
         if not info:
             return None
         codecs = self.get_codecs(file_path)
         width, height = self.get_resolution(file_path)
-        duration = None
-        bitrate = None
+        duration: Optional[float] = None
+        bitrate: Optional[str] = None
         if info and "format" in info:
-            duration = float(info["format"].get("duration", 0))
-            bitrate = info["format"].get("bit_rate", None)
+            duration_str = info["format"].get("duration")
+            if duration_str:
+                duration = float(duration_str)
+            bitrate = info["format"].get("bit_rate")
         size_mb = os.path.getsize(file_path) / 1024 / 1024
         return {
             "filename": os.path.basename(file_path),

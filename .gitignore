@@ -209,6 +209,14 @@ tempCodeRunnerFile.py
 # Promotional files
 promocion_y_release.txt
 
+# Capture screenshots
+dist/Captura.PNG
+
+# UPX
+dist/upx.exe
+dist/upx.zip
+dist/upx-*/
+
 # Downloaded FFmpeg binaries (use download_ffmpeg.py)
 resources/bin/ffmpeg.exe
 resources/bin/ffprobe.exe

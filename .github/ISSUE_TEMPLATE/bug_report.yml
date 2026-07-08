@@ -1,0 +1,60 @@
+name: 🐛 Bug Report
+description: Reportar un error para ayudarnos a mejorar
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gracias por reportar un bug. Por favor completa la siguiente información.
+
+  - type: input
+    id: version
+    attributes:
+      label: Versión
+      description: ¿Qué versión de Shuttle Codec usas?
+      placeholder: "v1.0.0"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Sistema Operativo
+      description: Windows 10/11, Linux, etc.
+      placeholder: "Windows 11"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Descripción
+      description: Describe el bug de forma clara y concisa.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Pasos para reproducir
+      description: ¿Cómo podemos reproducir el error?
+      placeholder: |
+        1. Abro la app
+        2. Arrastro un archivo MP4
+        3. Selecciono formato GIF
+        4. Veo el error...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Copia aquí los logs de la ventana de registro de la app.
+      render: text
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Capturas de pantalla
+      description: Si aplica, agrega capturas para explicar el problema.
