@@ -4,7 +4,7 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QComboBox, QSlider, QProgressBar,
     QFileDialog, QGroupBox,
     QCheckBox, QMessageBox, QTextEdit, QLineEdit, QFrame,

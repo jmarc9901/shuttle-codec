@@ -1,6 +1,5 @@
 import sys
 import os
-from typing import List
 
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtGui import QIcon

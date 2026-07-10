@@ -5,7 +5,7 @@ Provides translations for Spanish (es) and English (en) languages.
 Use the `tr()` function to get translated strings throughout the app.
 """
 
-from typing import Dict, Optional
+from typing import Dict
 
 LANG_ES = "es"
 LANG_EN = "en"

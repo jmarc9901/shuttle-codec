@@ -1,6 +1,5 @@
 import os
 import sys
-from pathlib import Path
 from shutil import which
 from typing import Callable, Optional, Tuple
 
