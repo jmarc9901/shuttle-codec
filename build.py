@@ -95,15 +95,15 @@ exe = EXE(
 
 
 def check_ffmpeg() -> bool:
-    """Check if FFmpeg binaries exist."""
+    """Check if FFmpeg binaries exist. Returns False if not found (non-fatal on macOS/Linux)."""
     ffmpeg = os.path.join(BIN_DIR, FFMPEG_BIN)
     ffprobe = os.path.join(BIN_DIR, FFPROBE_BIN)
     if not os.path.isfile(ffmpeg):
-        print(f"ERROR: {ffmpeg} not found!")
-        print("Run 'python download_ffmpeg.py' first.")
+        print(f"  [WARN] {ffmpeg} not found")
+        print("  The app will use system FFmpeg from PATH at runtime.")
         return False
     if not os.path.isfile(ffprobe):
-        print(f"ERROR: {ffprobe} not found!")
+        print(f"  [WARN] {ffprobe} not found")
         return False
     size_mb = os.path.getsize(ffmpeg) / 1024 / 1024
     print(f"  [OK] {FFMPEG_BIN} ({size_mb:.1f} MB)")
@@ -125,7 +125,10 @@ def build() -> None:
     print(f"{'='*50}\n")
 
     print("Checking FFmpeg binaries...")
-    if not check_ffmpeg():
+    has_ffmpeg = check_ffmpeg()
+    if not has_ffmpeg and sys.platform == "win32":
+        print("ERROR: FFmpeg binaries required for Windows build.")
+        print("Run 'python download_ffmpeg.py' first.")
         sys.exit(1)
 
     print("\nGenerating spec file...")

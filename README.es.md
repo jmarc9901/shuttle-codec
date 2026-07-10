@@ -35,6 +35,14 @@
 
 ---
 
+## Demo
+
+<p align="center">
+  <img src="docs/demo.gif" alt="Shuttle Codec demo" width="800"/>
+</p>
+
+---
+
 ## Caracteristicas principales
 
 ### Faciles de usar

@@ -38,7 +38,9 @@
 ## Screenshots
 
 <p align="center">
-  <img src="screenshot.png" alt="Shuttle Codec main interface" width="700"/>
+  <img src="docs/demo.gif" alt="Shuttle Codec demo" width="800"/>
+  <br/>
+  <em>Simple mode → Presets → Expert mode → Language switch</em>
 </p>
 
 ---
