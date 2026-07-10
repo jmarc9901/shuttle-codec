@@ -16,6 +16,7 @@ from PyQt5.QtGui import QFont, QIcon, QColor, QDragEnterEvent, QDropEvent, QKeyS
 
 from .ffmpeg_handler import FFmpegHandler
 from .i18n import tr, set_language, get_available_languages, get_language
+from .presets import get_preset, get_preset_ids
 
 
 def _get_icon_path() -> str:
@@ -134,6 +135,7 @@ class MainWindow(QMainWindow):
         self.media_info: Optional[Dict[str, Any]] = None
         self.settings = QSettings("ShuttleCodec", "ShuttleCodec")
         self.simple_mode = True
+        self._preset_settings: Dict[str, Any] = {}
 
         self.init_ui()
         self._load_settings()
@@ -164,8 +166,9 @@ class MainWindow(QMainWindow):
         self._create_info_panel(main_layout)
 
         self._create_mode_toggle(main_layout)
+        self._create_preset_section(main_layout)
 
-        content_splitter = QSplitter(Qt.Horizontal)
+        self.content_splitter = QSplitter(Qt.Horizontal)
 
         left_widget = QWidget()
         left_widget.setAutoFillBackground(True)
@@ -184,21 +187,24 @@ class MainWindow(QMainWindow):
         pal2 = left_scroll.viewport().palette()
         pal2.setColor(left_scroll.viewport().backgroundRole(), QColor("#1e1e2e"))
         left_scroll.viewport().setPalette(pal2)
-        content_splitter.addWidget(left_scroll)
+        self.content_splitter.addWidget(left_scroll)
 
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
         right_layout.setContentsMargins(0, 0, 0, 0)
         self._create_batch_section(right_layout)
-        content_splitter.addWidget(right_widget)
+        self.content_splitter.addWidget(right_widget)
 
-        content_splitter.setSizes([650, 350])
-        main_layout.addWidget(content_splitter, 1)
+        self.content_splitter.setSizes([650, 350])
+        main_layout.addWidget(self.content_splitter, 1)
 
         self._create_progress_section(main_layout)
         self._create_log_section(main_layout)
         self._create_status_bar()
         self._setup_shortcuts()
+
+        self.preset_section.setVisible(self.simple_mode)
+        self.content_splitter.setVisible(not self.simple_mode)
 
     def _style_app(self):
         self.setStyleSheet("""
@@ -555,6 +561,32 @@ class MainWindow(QMainWindow):
             data = self.video_fps.itemData(i)
             if data and str(data) in fps_dict:
                 self.video_fps.setItemText(i, fps_dict[str(data)])
+
+        # Rebuild preset combo labels
+        current_preset_id = self.preset_combo.currentData()
+        self.preset_combo.blockSignals(True)
+        self.preset_combo.clear()
+        for pid in get_preset_ids():
+            preset = get_preset(pid)
+            if preset:
+                self.preset_combo.addItem(tr(preset["label_key"]), pid)
+        if current_preset_id:
+            idx = self.preset_combo.findData(current_preset_id)
+            if idx >= 0:
+                self.preset_combo.setCurrentIndex(idx)
+        self.preset_combo.blockSignals(False)
+
+        # Update preset title and desc
+        title_item = self.preset_section.layout().itemAt(0)
+        if title_item:
+            hlayout = title_item.layout()
+            if hlayout:
+                label_item = hlayout.itemAt(1)
+                if label_item and label_item.widget():
+                    label_item.widget().setText(tr("preset_quick_title"))
+        if self._preset_settings:
+            desc_key = self._preset_settings.get("desc_key", "")
+            self.preset_desc.setText(tr(desc_key) if desc_key else "")
 
     def _create_file_section(self, layout: QHBoxLayout) -> None:
         file_frame = QFrame()
@@ -918,6 +950,9 @@ class MainWindow(QMainWindow):
         self.settings.setValue("video/resolution", str(res_data) if res_data else "")
         fps_data = self.video_fps.currentData()
         self.settings.setValue("video/fps", str(fps_data) if fps_data else "")
+        preset_id = self.preset_combo.currentData()
+        if preset_id and isinstance(preset_id, str):
+            self.settings.setValue("preset/id", preset_id)
 
     def _load_settings(self) -> None:
         geo = self.settings.value("window/geometry")
@@ -958,6 +993,12 @@ class MainWindow(QMainWindow):
             if idx >= 0:
                 self.video_fps.setCurrentIndex(idx)
 
+        preset_id = self.settings.value("preset/id")
+        if preset_id and isinstance(preset_id, str):
+            idx = self.preset_combo.findData(preset_id)
+            if idx >= 0:
+                self.preset_combo.setCurrentIndex(idx)
+
     def closeEvent(self, event: QCloseEvent) -> None:  # type: ignore[override]
         self._save_settings()
         if self.current_thread and self.current_thread.isRunning():
@@ -997,6 +1038,8 @@ class MainWindow(QMainWindow):
 
     def _toggle_mode(self) -> None:
         self.simple_mode = not self.expert_btn.isChecked()
+        self.preset_section.setVisible(self.simple_mode)
+        self.content_splitter.setVisible(not self.simple_mode)
         self.advanced_video.setVisible(not self.simple_mode)
         if self.simple_mode:
             self.expert_btn.setText(tr("btn_expert_show"))
@@ -1004,6 +1047,81 @@ class MainWindow(QMainWindow):
         else:
             self.expert_btn.setText(tr("btn_expert_hide"))
             self.mode_label.setText(tr("mode_expert"))
+            if self._preset_settings:
+                self._apply_preset_to_controls(self._preset_settings)
+
+    def _create_preset_section(self, layout: QVBoxLayout) -> None:
+        self.preset_section = QFrame()
+        self.preset_section.setObjectName("infoPanel")
+        ps_layout = QVBoxLayout(self.preset_section)
+        ps_layout.setContentsMargins(8, 4, 8, 4)
+        ps_layout.setSpacing(6)
+
+        header_row = QHBoxLayout()
+        quick_icon = QLabel("⚡")
+        quick_icon.setStyleSheet("font-size: 16px;")
+        header_row.addWidget(quick_icon)
+        quick_title = QLabel(tr("preset_quick_title"))
+        quick_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #cdd6f4;")
+        header_row.addWidget(quick_title)
+        header_row.addStretch()
+        ps_layout.addLayout(header_row)
+
+        self.preset_combo = QComboBox()
+        self.preset_combo.setMinimumHeight(36)
+        self.preset_combo.setStyleSheet("font-size: 14px; padding: 4px 8px;")
+        for pid in get_preset_ids():
+            preset = get_preset(pid)
+            if preset:
+                self.preset_combo.addItem(tr(preset["label_key"]), pid)
+        self.preset_combo.currentIndexChanged.connect(self._on_preset_change)
+        ps_layout.addWidget(self.preset_combo)
+
+        self.preset_desc = QLabel("")
+        self.preset_desc.setStyleSheet("color: #a6adc8; font-size: 12px; padding-left: 4px;")
+        self.preset_desc.setWordWrap(True)
+        ps_layout.addWidget(self.preset_desc)
+
+        if self.preset_combo.count() > 0:
+            self.preset_combo.setCurrentIndex(0)
+
+        layout.addWidget(self.preset_section)
+
+    def _on_preset_change(self, index: int) -> None:
+        preset_id = self.preset_combo.itemData(index)
+        if preset_id and isinstance(preset_id, str):
+            preset = get_preset(preset_id)
+            if preset:
+                self._preset_settings = dict(preset)
+                desc_key = preset.get("desc_key", "")
+                self.preset_desc.setText(tr(desc_key) if desc_key else "")
+
+    def _apply_preset_to_controls(self, preset: Dict[str, Any]) -> None:
+        fmt_idx = self.video_format.findText(preset.get("format", ""))
+        if fmt_idx >= 0:
+            self.video_format.setCurrentIndex(fmt_idx)
+
+        self.video_crf.setValue(preset.get("crf", 23))
+
+        enc_preset = preset.get("enc_preset", "")
+        if enc_preset:
+            p_idx = self.video_preset.findText(enc_preset)
+            if p_idx >= 0:
+                self.video_preset.setCurrentIndex(p_idx)
+
+        res = preset.get("resolution", "Original")
+        for i in range(self.video_resolution.count()):
+            if self.video_resolution.itemData(i) == res:
+                self.video_resolution.setCurrentIndex(i)
+                break
+
+        fps = preset.get("framerate", "Original")
+        for i in range(self.video_fps.count()):
+            if self.video_fps.itemData(i) == fps:
+                self.video_fps.setCurrentIndex(i)
+                break
+
+        self.video_keep_audio.setChecked(preset.get("keep_audio", True))
 
     # ─── FILE HANDLING ──────────────────────────────────────────────────────────
     @staticmethod
@@ -1205,6 +1323,33 @@ class MainWindow(QMainWindow):
         return float(start_s), float(end_s - start_s)
 
     def _get_settings_from_ui(self) -> Tuple[str, Dict[str, Any]]:
+        if self.simple_mode and self._preset_settings:
+            ps = self._preset_settings
+            fmt_name = ps.get("format", "MP4 (H.264)")
+            fmt = self.ffmpeg.VIDEO_FORMATS.get(fmt_name)
+            res_map: Dict[str, Optional[str]] = {
+                "Original": None,
+                "3840x2160 (4K)": "3840:2160",
+                "2560x1440 (1440p)": "2560:1440",
+                "1920x1080 (1080p)": "1920:1080",
+                "1280x720 (720p)": "1280:720",
+                "854x480 (480p)": "854:480",
+                "640x360 (360p)": "640:360",
+            }
+            is_gif = fmt.get("gif_mode", False) if fmt else False
+            fps_raw = ps.get("framerate", "Original")
+            return "video", {
+                "format": fmt_name,
+                "crf": ps.get("crf", 23),
+                "preset": ps.get("enc_preset", ""),
+                "resolution": res_map.get(str(ps.get("resolution", "")), None),
+                "framerate": None if str(fps_raw) == "Original" else str(fps_raw),
+                "keep_audio": ps.get("keep_audio", True) if not is_gif else False,
+                "audio_codec": "aac",
+                "audio_bitrate": "192k",
+                "hw_accel": False,
+                "extension": fmt["extension"] if fmt else ".mp4",
+            }
         fmt_name = self.video_format.currentText()
         fmt = self.ffmpeg.VIDEO_FORMATS.get(fmt_name)
         res_data = self.video_resolution.currentData()
@@ -1245,7 +1390,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, tr("title_error"), tr("error_ffmpeg_unavailable"))
             return
 
-        if self.batch_items:
+        if not self.simple_mode and self.batch_items:
             self._start_batch_conversion()
             return
 

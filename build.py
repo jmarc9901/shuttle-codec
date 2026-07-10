@@ -1,15 +1,32 @@
 """
 Build script for Shuttle Codec.
 Embeds FFmpeg binaries into the executable.
+Supports Windows, macOS, and Linux.
 """
 import os
 import sys
 import shutil
+import platform
 
 APP_NAME = "shuttle-codec"
 RESOURCES_DIR = "resources"
 BIN_DIR = os.path.join(RESOURCES_DIR, "bin")
-SPEC_FILE = f"{APP_NAME}.spec"
+
+# Platform-specific binary names
+if sys.platform == "win32":
+    FFMPEG_BIN = "ffmpeg.exe"
+    FFPROBE_BIN = "ffprobe.exe"
+    TARGET_EXT = ".exe"
+elif sys.platform == "darwin":
+    FFMPEG_BIN = "ffmpeg"
+    FFPROBE_BIN = "ffprobe"
+    TARGET_EXT = ""
+else:  # Linux
+    FFMPEG_BIN = "ffmpeg"
+    FFPROBE_BIN = "ffprobe"
+    TARGET_EXT = ""
+
+SPEC_FILE = f"{APP_NAME}{TARGET_EXT}.spec" if TARGET_EXT else f"{APP_NAME}.spec"
 
 SPEC_TEMPLATE = f"""# -*- mode: python ; coding: utf-8 -*-
 import sys
@@ -21,7 +38,7 @@ block_cipher = None
 binaries = []
 bin_path = Path(r"{BIN_DIR}")
 if bin_path.exists():
-    for exe in ["ffmpeg.exe", "ffprobe.exe"]:
+    for exe in ["{FFMPEG_BIN}", "{FFPROBE_BIN}"]:
         exe_path = bin_path / exe
         if exe_path.exists():
             binaries.append((
@@ -66,7 +83,7 @@ exe = EXE(
     upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=False,
+    console={str(sys.platform != "win32")},
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
@@ -77,10 +94,10 @@ exe = EXE(
 """
 
 
-def check_ffmpeg():
+def check_ffmpeg() -> bool:
     """Check if FFmpeg binaries exist."""
-    ffmpeg = os.path.join(BIN_DIR, "ffmpeg.exe")
-    ffprobe = os.path.join(BIN_DIR, "ffprobe.exe")
+    ffmpeg = os.path.join(BIN_DIR, FFMPEG_BIN)
+    ffprobe = os.path.join(BIN_DIR, FFPROBE_BIN)
     if not os.path.isfile(ffmpeg):
         print(f"ERROR: {ffmpeg} not found!")
         print("Run 'python download_ffmpeg.py' first.")
@@ -89,34 +106,31 @@ def check_ffmpeg():
         print(f"ERROR: {ffprobe} not found!")
         return False
     size_mb = os.path.getsize(ffmpeg) / 1024 / 1024
-    print(f"  [OK] ffmpeg.exe ({size_mb:.1f} MB)")
+    print(f"  [OK] {FFMPEG_BIN} ({size_mb:.1f} MB)")
     size_mb = os.path.getsize(ffprobe) / 1024 / 1024
-    print(f"  [OK] ffprobe.exe ({size_mb:.1f} MB)")
+    print(f"  [OK] {FFPROBE_BIN} ({size_mb:.1f} MB)")
     return True
 
 
-def write_spec():
+def write_spec() -> None:
     """Write the spec file with FFmpeg paths."""
     with open(SPEC_FILE, "w") as f:
         f.write(SPEC_TEMPLATE)
     print(f"  [OK] Created {SPEC_FILE}")
 
 
-def build():
+def build() -> None:
     print(f"\n{'='*50}")
-    print(f"  Building {APP_NAME}")
+    print(f"  Building {APP_NAME} for {platform.system()}")
     print(f"{'='*50}\n")
 
-    # Check FFmpeg
     print("Checking FFmpeg binaries...")
     if not check_ffmpeg():
         sys.exit(1)
 
-    # Write spec
     print("\nGenerating spec file...")
     write_spec()
 
-    # Run PyInstaller
     print("\nRunning PyInstaller...")
     import subprocess
     result = subprocess.call(
@@ -124,12 +138,19 @@ def build():
     )
 
     if result == 0:
-        dist_path = os.path.join("dist", f"{APP_NAME}.exe")
+        dist_name = f"{APP_NAME}{TARGET_EXT}" if TARGET_EXT else APP_NAME
+        dist_path = os.path.join("dist", dist_name)
         if os.path.isfile(dist_path):
             size_mb = os.path.getsize(dist_path) / 1024 / 1024
             print(f"\n{'='*50}")
             print(f"  [SUCCESS] Build completed!")
             print(f"  Output: {dist_path} ({size_mb:.1f} MB)")
+            print(f"{'='*50}")
+        elif os.path.isdir(dist_name):
+            # macOS .app bundle
+            print(f"\n{'='*50}")
+            print(f"  [SUCCESS] Build completed!")
+            print(f"  Output: {dist_name}")
             print(f"{'='*50}")
         else:
             print(f"\n[WARNING] Build completed but {dist_path} not found?")
