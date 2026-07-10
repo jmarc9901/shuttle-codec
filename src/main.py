@@ -18,7 +18,7 @@ def _get_icon_path() -> str:
 def main() -> None:
     app = QApplication(sys.argv)
     app.setApplicationName(tr("app_name"))
-    app.setApplicationVersion("1.0.0")
+    app.setApplicationVersion("1.1.0")
     app.setWindowIcon(QIcon(_get_icon_path()))
     window = MainWindow()
     window.show()

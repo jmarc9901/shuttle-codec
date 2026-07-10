@@ -1,0 +1,22 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Python
+*.py text diff=python
+
+# Windows specific
+*.exe binary
+*.dll binary
+
+# Images
+*.png binary
+*.ico binary
+
+# Archives
+*.zip binary
+*.7z binary
+
+# Documentation
+*.md text
+*.rst text
+*.txt text
