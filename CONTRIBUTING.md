@@ -26,12 +26,12 @@
 2. Crea una rama desde `main`: `git checkout -b feature/mi-feature`
 3. Haz commits con mensajes claros (en español o inglés)
 4. Ejecuta los tests: `python -m pytest tests/ -v`
-5. Asegúrate de que el código pase el lint: `ruff check src/`
+5. Asegúrate de que el código pase lint y tipado: `ruff check .` y `mypy src/`
 6. Haz push y abre un Pull Request
 
 #### Estándares de código
 
-- **Python 3.8+** compatible
+- **Python 3.10+** compatible
 - **Type hints** en todas las funciones y métodos
 - Nombres de variables en inglés (snake_case)
 - Comentarios y docstrings en español (idioma del proyecto)
@@ -43,8 +43,9 @@
 # Verificar que los tests pasan
 python -m pytest tests/ -v
 
-# Verificar sintaxis
-python -c "import py_compile; py_compile.compile('src/app.py', doraise=True)"
+# Lint y tipado
+ruff check .
+mypy src/
 ```
 
 ## Entorno de desarrollo
@@ -52,8 +53,7 @@ python -c "import py_compile; py_compile.compile('src/app.py', doraise=True)"
 ```bash
 git clone https://github.com/jmarc9901/shuttle-codec.git
 cd shuttle-codec
-pip install -r requirements.txt
-pip install pytest    # Para tests
+pip install -e ".[dev]"     # PyQt5 + pytest + ruff + mypy
 python download_ffmpeg.py   # Descargar FFmpeg (primera vez)
 python -m src.main          # Ejecutar
 ```

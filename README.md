@@ -11,7 +11,7 @@
     <img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License">
   </a>
   <a href="https://www.python.org/downloads/">
-    <img src="https://img.shields.io/badge/python-3.8%2B-blue" alt="Python">
+    <img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python">
   </a>
   <a href="https://github.com/jmarc9901/shuttle-codec/actions">
     <img src="https://img.shields.io/github/actions/workflow/status/jmarc9901/shuttle-codec/ci.yml?branch=main&label=CI" alt="CI">
@@ -58,7 +58,7 @@
 
 ### Powerful
 - **Video Conversion**: MP4 (H.264/H.265), MKV, AVI, MOV, WebM, **GIF**
-- **Audio Conversion**: MP3, AAC, WAV, FLAC, OGG, M4A, WMA
+- **Audio Conversion**: MP3, AAC, WAV, FLAC, OGG, M4A, WMA (audio-only inputs)
 - **Batch Processing**: Convert multiple files with the same settings
 - **GIF Conversion**: Optimized GIFs with palette optimization (palettegen + paletteuse)
 - **Video Trimming**: Select start and end points to cut specific segments
@@ -101,7 +101,7 @@ python -m src.main
 
 ```bash
 python download_ffmpeg.py
-pip install pyinstaller
+pip install -e ".[build]"   # pyinstaller + pillow
 python build.py
 ```
 
@@ -113,7 +113,7 @@ The executable will be at `dist/shuttle-codec.exe`.
 
 | Layer | Technology |
 |-------|-----------|
-| Language | Python 3.11+ |
+| Language | Python 3.10+ |
 | GUI | PyQt5 |
 | Video Engine | FFmpeg (bundled) |
 | Packaging | PyInstaller |
@@ -122,45 +122,48 @@ The executable will be at `dist/shuttle-codec.exe`.
 
 ---
 
-## Recent Improvements (v1.1.0)
+## What's new in v1.2.0
+
+### 🐛 Correctness
+- **WebM output fixed**: WebM only accepts Opus/Vorbis, so the audio track is
+  now re-encoded to Opus instead of producing an unwritable AAC stream
+  (`Could not write header`). Stream-copy is skipped for WebM too.
+- **HEVC hardware acceleration fixed**: MP4 (H.265) now selects `hevc_nvenc`
+  / `hevc_amf` / `hevc_qsv` instead of silently falling back to the H.264 encoder.
+- **Constant-quality VP9**: added the required `-b:v 0` and replaced the
+  unsupported `-preset` with libvpx's `-deadline`/`-cpu-used`.
+- **GIF filter cleanup**: no more invalid `scale=-1:-1` when keeping the
+  original resolution.
+- **HEVC in MP4/MOV** is tagged `hvc1` for QuickTime/Apple compatibility.
 
 ### 🔒 Security
-- SSL verification enabled for FFmpeg download (removed `CERT_NONE`)
-- Path validation with `os.path.realpath()` to prevent path traversal
-- Media file validation (size, existence, type) before processing
-- Safe subprocess handling with timeouts
+- Safe tar/zip extraction when downloading FFmpeg (mitigates CVE-2007-4559
+  path traversal) plus `filter="data"` on Python 3.12+.
+- SSL verification for the FFmpeg download, path validation with
+  `os.path.realpath()`, and media validation before processing.
 
-### 🎯 Typing & Quality
-- Type hints across all functions and methods
-- Return type and parameter hints throughout the codebase
-- Import reorganization and removal of unused imports
+### 🎯 Quality
+- `ruff` and `mypy` pass cleanly on the whole tree (CI enforces both).
+- 110 unit tests, including regression tests for every fix above and a
+  headless smoke test for the main window.
+- Modern PEP 604 typing (`str | None`) on a Python 3.10+ baseline.
+- Renamed the batch worker's `thread` attribute (it shadowed `QObject.thread()`).
 
-### 🌐 Internationalization
-- Complete i18n system with Spanish/English support
-- 100+ translated strings in both languages
-- Language selector in the app header
-- Language persistence between sessions
-
-### 🧪 Testing
-- 37 unit tests covering:
-  - `ffmpeg_handler.py`: 22 tests (commands, formats, hardware, path resolution)
-  - `ffmpeg_downloader.py`: 8 tests (binary search, bundled vs system)
-  - `i18n.py`: 7 tests (translations, language switching, missing keys)
-- Run with `python -m pytest tests/`
-
-### 💡 UX/UI
-- Descriptive tooltips on all controls
-- File validation with clear error messages
-- Properly handled empty states
-- Language selector directly in the header
+### 🌐 Internationalization & UX
+- Spanish/English UI with instant language switching and persistence.
+- The FFmpeg status badge and hardware-acceleration label are re-rendered
+  correctly after a language change.
 
 ---
 
-## Run Tests
+## Development
 
 ```bash
-pip install pytest
-python -m pytest tests/ -v
+pip install -e ".[dev]"
+
+python -m pytest tests/ -v     # 110 unit tests
+ruff check .                   # lint
+mypy src/                      # type check
 ```
 
 ---
@@ -171,15 +174,25 @@ python -m pytest tests/ -v
 shuttle-codec/
 ├── src/
 │   ├── __init__.py
-│   ├── main.py              # Entry point
-│   ├── app.py               # Main UI (PyQt5)
-│   ├── ffmpeg_handler.py     # FFmpeg/FFprobe logic
-│   ├── ffmpeg_downloader.py  # Binary location
-│   └── i18n.py              # ES/EN translations
+│   ├── main.py               # Entry point
+│   ├── app.py                # Main window (PyQt5) + orchestration
+│   ├── workers.py            # QThread conversion worker + batch manager
+│   ├── ffmpeg_handler.py     # FFmpeg/FFprobe command building & execution
+│   ├── ffmpeg_downloader.py  # Bundled vs system binary discovery
+│   ├── presets.py            # Use-case presets + resolution map
+│   ├── theme.py              # Catppuccin Mocha palette & stylesheet
+│   ├── utils.py              # Icon path, time/size formatting helpers
+│   └── i18n.py               # ES/EN translations
 ├── tests/
-│   ├── test_i18n.py
-│   ├── test_ffmpeg_handler.py
-│   └── test_ffmpeg_downloader.py
+│   ├── test_app_smoke.py        # headless UI wiring (skipped without Qt)
+│   ├── test_ffmpeg_handler.py   # commands, formats, hardware, trim, audio
+│   ├── test_ffmpeg_downloader.py
+│   ├── test_download_ffmpeg.py  # archive extraction safety
+│   ├── test_workers.py          # batch manager
+│   ├── test_presets.py
+│   ├── test_theme.py
+│   ├── test_utils.py
+│   └── test_i18n.py
 ├── resources/bin/           # Bundled FFmpeg binaries
 ├── download_ffmpeg.py       # FFmpeg downloader
 ├── build.py                 # PyInstaller builder

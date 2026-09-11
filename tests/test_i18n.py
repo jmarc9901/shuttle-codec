@@ -1,10 +1,10 @@
-import unittest
-import sys
 import os
+import sys
+import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from src.i18n import tr, set_language, get_language, get_available_languages, LANG_ES, LANG_EN
+from src.i18n import LANG_EN, LANG_ES, get_available_languages, get_language, set_language, tr
 
 
 class TestI18n(unittest.TestCase):

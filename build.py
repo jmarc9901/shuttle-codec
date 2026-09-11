@@ -4,9 +4,8 @@ Embeds FFmpeg binaries into the executable.
 Supports Windows, macOS, and Linux.
 """
 import os
-import sys
-import shutil
 import platform
+import sys
 
 APP_NAME = "shuttle-codec"
 RESOURCES_DIR = "resources"
@@ -25,6 +24,10 @@ else:  # Linux
     FFMPEG_BIN = "ffmpeg"
     FFPROBE_BIN = "ffprobe"
     TARGET_EXT = ""
+
+# Prefer a ready-made .ico (Windows); PyInstaller converts logo.png with Pillow
+# on macOS/Linux, so keep the PNG fallback for cross-platform builds.
+ICON_FILE = "logo.ico" if os.path.isfile("logo.ico") else "logo.png"
 
 SPEC_FILE = f"{APP_NAME}{TARGET_EXT}.spec" if TARGET_EXT else f"{APP_NAME}.spec"
 
@@ -89,7 +92,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='logo.png',
+    icon='{ICON_FILE}',
 )
 """
 
@@ -146,13 +149,13 @@ def build() -> None:
         if os.path.isfile(dist_path):
             size_mb = os.path.getsize(dist_path) / 1024 / 1024
             print(f"\n{'='*50}")
-            print(f"  [SUCCESS] Build completed!")
+            print("  [SUCCESS] Build completed!")
             print(f"  Output: {dist_path} ({size_mb:.1f} MB)")
             print(f"{'='*50}")
         elif os.path.isdir(dist_name):
             # macOS .app bundle
             print(f"\n{'='*50}")
-            print(f"  [SUCCESS] Build completed!")
+            print("  [SUCCESS] Build completed!")
             print(f"  Output: {dist_name}")
             print(f"{'='*50}")
         else:

@@ -1,13 +1,12 @@
-import platform
-import urllib.request
 import io
 import os
-import sys
-import zipfile
-import ssl
+import platform
 import shutil
+import ssl
+import sys
 import tarfile
-from typing import Optional
+import urllib.request
+import zipfile
 
 # Platform-specific binary names and URLs
 if sys.platform == "win32":
@@ -86,6 +85,9 @@ def _extract_zip(buffer: io.BytesIO, target_dir: str) -> int:
     buffer.seek(0)
     with zipfile.ZipFile(buffer) as zf:
         for member in zf.namelist():
+            if not _is_safe_member(target_dir, member):
+                print(f"  Skipped unsafe entry: {member}")
+                continue
             if member.endswith(FFMPEG_BIN) or member.endswith(FFPROBE_BIN):
                 zf.extract(member, target_dir)
                 src = os.path.join(target_dir, member)
@@ -105,22 +107,39 @@ def _extract_zip(buffer: io.BytesIO, target_dir: str) -> int:
     return extracted
 
 
+def _is_safe_member(target_dir: str, member_name: str) -> bool:
+    """Reject members that would extract outside `target_dir` (path traversal)."""
+    base = os.path.realpath(target_dir)
+    destination = os.path.realpath(os.path.join(base, member_name))
+    return destination == base or destination.startswith(base + os.sep)
+
+
 def _extract_tar(buffer: io.BytesIO, target_dir: str) -> int:
     extracted = 0
     buffer.seek(0)
     with tarfile.open(fileobj=buffer, mode="r:xz") as tf:
         for member in tf.getmembers():
+            # Only regular files are considered; reject symlinks/devices and
+            # anything whose resolved path escapes the target directory.
+            if not member.isfile() or not _is_safe_member(target_dir, member.name):
+                print(f"  Skipped unsafe entry: {member.name}")
+                continue
             name = os.path.basename(member.name)
-            if name == FFMPEG_BIN or name == FFPROBE_BIN:
+            if name != FFMPEG_BIN and name != FFPROBE_BIN:
+                continue
+            # Python 3.12+ wants an explicit extraction filter (CVE-2007-4559).
+            if sys.version_info >= (3, 12):
+                tf.extract(member, target_dir, filter="data")
+            else:
                 tf.extract(member, target_dir)
-                src = os.path.join(target_dir, member.name)
-                dst = os.path.join(target_dir, name)
-                if os.path.isfile(dst):
-                    os.remove(dst)
-                shutil.move(src, dst)
-                os.chmod(dst, 0o755)
-                extracted += 1
-                print(f"  Extracted: {name}")
+            src = os.path.join(target_dir, member.name)
+            dst = os.path.join(target_dir, name)
+            if os.path.isfile(dst):
+                os.remove(dst)
+            shutil.move(src, dst)
+            os.chmod(dst, 0o755)
+            extracted += 1
+            print(f"  Extracted: {name}")
 
     return extracted
 
@@ -188,10 +207,7 @@ def main() -> None:
         print("  Linux: sudo apt install ffmpeg  (or your package manager)")
         sys.exit(1)
 
-    if ARCHIVE_TYPE == "zip":
-        extracted = _extract_zip(buffer, TARGET_DIR)
-    else:
-        extracted = _extract_tar(buffer, TARGET_DIR)
+    extracted = _extract_zip(buffer, TARGET_DIR) if ARCHIVE_TYPE == "zip" else _extract_tar(buffer, TARGET_DIR)
 
     _report_results(TARGET_DIR, extracted)
 

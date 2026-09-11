@@ -1,2 +1,1 @@
 PyQt5>=5.15.0
-PyInstaller>=6.0.0

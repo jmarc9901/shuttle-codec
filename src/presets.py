@@ -1,8 +1,22 @@
-from typing import Any, Dict, List, Optional
+"""Conversion presets and shared resolution mapping for Shuttle Codec."""
 
-PresetDef = Dict[str, Any]
+from typing import Any
 
-PRESETS: Dict[str, PresetDef] = {
+PresetDef = dict[str, Any]
+
+# Shared mapping: UI display label -> FFmpeg scale argument.
+# Single source of truth used by presets and the main window.
+RESOLUTION_MAP: dict[str, str | None] = {
+    "Original": None,
+    "3840x2160 (4K)": "3840:2160",
+    "2560x1440 (1440p)": "2560:1440",
+    "1920x1080 (1080p)": "1920:1080",
+    "1280x720 (720p)": "1280:720",
+    "854x480 (480p)": "854:480",
+    "640x360 (360p)": "640:360",
+}
+
+PRESETS: dict[str, PresetDef] = {
     "youtube_1080p": {
         "label_key": "preset_youtube_1080p",
         "desc_key": "preset_youtube_1080p_desc",
@@ -57,7 +71,7 @@ PRESETS: Dict[str, PresetDef] = {
         "label_key": "preset_twitter_gif",
         "desc_key": "preset_twitter_gif_desc",
         "format": "GIF",
-        "crf": 0,
+        "max_colors": 128,
         "enc_preset": "",
         "resolution": "Original",
         "framerate": "15",
@@ -85,7 +99,7 @@ PRESETS: Dict[str, PresetDef] = {
     },
 }
 
-PRESET_ORDER: List[str] = [
+PRESET_ORDER: list[str] = [
     "youtube_1080p",
     "youtube_4k",
     "whatsapp",
@@ -97,9 +111,16 @@ PRESET_ORDER: List[str] = [
 ]
 
 
-def get_preset(preset_id: str) -> Optional[PresetDef]:
+def get_preset(preset_id: str) -> PresetDef | None:
     return PRESETS.get(preset_id)
 
 
-def get_preset_ids() -> List[str]:
+def get_preset_ids() -> list[str]:
     return PRESET_ORDER
+
+
+def resolution_to_scale(display_label: str | None) -> str | None:
+    """Translate a UI resolution label into an FFmpeg scale value (None = keep original)."""
+    if display_label is None:
+        return None
+    return RESOLUTION_MAP.get(str(display_label))

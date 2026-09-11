@@ -5,12 +5,11 @@ Provides translations for Spanish (es) and English (en) languages.
 Use the `tr()` function to get translated strings throughout the app.
 """
 
-from typing import Dict
 
 LANG_ES = "es"
 LANG_EN = "en"
 
-TRANSLATIONS: Dict[str, Dict[str, str]] = {
+TRANSLATIONS: dict[str, dict[str, str]] = {
     LANG_ES: {
         "app_name": "Shuttle Codec",
         "app_subtitle": 'Conversor de video · <a href="https://github.com/jmarc9901" style="color:#89b4fa; text-decoration:none;">Desarrollado por JMarc</a>',
@@ -30,18 +29,23 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "batch_add_title": "Agregar archivos al lote",
         "batch_filter": "Archivos multimedia (*.mp4 *.avi *.mkv *.mov *.wmv *.flv *.webm *.mp3 *.wav *.flac *.ogg *.m4a *.aac);;Todos los archivos (*)",
         "group_video": "🎬 Video",
+        "group_audio": "🎵 Audio",
         "label_format": "Formato:",
         "label_preset": "Preset:",
         "label_quality": "Calidad (CRF):",
         "label_resolution": "Resolución:",
         "label_fps": "FPS:",
+        "label_bitrate": "Bitrate:",
+        "label_colors": "Colores:",
         "chk_keep_audio": "Mantener audio original",
-        "chk_hw_accel": "Aceleración por hardware (NVENC)",
+        "chk_hw_accel": "Aceleración por hardware",
         "group_trim": "✂ Recorte (opcional)",
         "label_trim_start": "Inicio:",
         "label_trim_end": "Fin:",
         "label_trim_duration": "Duración:",
         "chk_trim_enable": "Recortar",
+        "trim_max_duration": "máx. 23:59:59",
+        "label_seconds": "s",
         "group_batch": "📦 Lista de lote",
         "btn_add_batch": "➕ Agregar a lote",
         "btn_remove_batch": "➖ Quitar selección",
@@ -94,6 +98,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "tip_convert": "Iniciar conversión (Ctrl+E)",
         "tip_cancel": "Cancelar conversión en curso",
         "tip_browse": "Examinar archivos multimedia (Ctrl+O)",
+        "tip_cancel_sel": "Limpiar archivo seleccionado",
         "tip_clear": "Limpiar archivo seleccionado",
         "tip_format": "Selecciona el formato de salida",
         "tip_preset": "Velocidad vs compresión: ultrafast (rápido) a veryslow (mejor compresión)",
@@ -101,6 +106,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "tip_resolution": "Resolución de salida. 'Original' mantiene la resolución actual",
         "tip_fps": "Fotogramas por segundo. 'Original' mantiene el FPS actual",
         "tip_hw_accel": "Usa GPU para acelerar la codificación (requiere GPU compatible)",
+        "tip_keep_audio": "Conserva el audio original sin recodificar cuando el formato de salida lo permite; si no, lo recodifica a AAC 192k",
         "save_as_title": "Guardar como",
         "all_files_filter": "Todos los archivos (*)",
         "resolution_original": "Original",
@@ -147,18 +153,23 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "batch_add_title": "Add files to batch",
         "batch_filter": "Media files (*.mp4 *.avi *.mkv *.mov *.wmv *.flv *.webm *.mp3 *.wav *.flac *.ogg *.m4a *.aac);;All files (*)",
         "group_video": "🎬 Video",
+        "group_audio": "🎵 Audio",
         "label_format": "Format:",
         "label_preset": "Preset:",
         "label_quality": "Quality (CRF):",
         "label_resolution": "Resolution:",
         "label_fps": "FPS:",
+        "label_bitrate": "Bitrate:",
+        "label_colors": "Colors:",
         "chk_keep_audio": "Keep original audio",
-        "chk_hw_accel": "Hardware acceleration (NVENC)",
+        "chk_hw_accel": "Hardware acceleration",
         "group_trim": "✂ Trim (optional)",
         "label_trim_start": "Start:",
         "label_trim_end": "End:",
         "label_trim_duration": "Duration:",
         "chk_trim_enable": "Trim",
+        "trim_max_duration": "max 23:59:59",
+        "label_seconds": "s",
         "group_batch": "📦 Batch list",
         "btn_add_batch": "➕ Add to batch",
         "btn_remove_batch": "➖ Remove selected",
@@ -219,6 +230,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "tip_resolution": "Output resolution. 'Original' keeps current resolution",
         "tip_fps": "Frames per second. 'Original' keeps current FPS",
         "tip_hw_accel": "Use GPU for encoding (requires compatible GPU)",
+        "tip_keep_audio": "Keeps the original audio stream without re-encoding when the output format allows it; otherwise re-encodes to AAC 192k",
         "save_as_title": "Save as",
         "all_files_filter": "All files (*)",
         "resolution_original": "Original",
@@ -261,7 +273,7 @@ def get_language() -> str:
     return _current_language
 
 
-def get_available_languages() -> Dict[str, str]:
+def get_available_languages() -> dict[str, str]:
     return {LANG_ES: "Español", LANG_EN: "English"}
 
 

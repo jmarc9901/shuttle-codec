@@ -1,16 +1,17 @@
-import sys, os, time
+import os
+import sys
 from pathlib import Path
 
 os.chdir(Path(__file__).parent)
 sys.path.insert(0, str(Path(__file__).parent))
 
-from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import QTimer
+from PyQt5.QtWidgets import QApplication
 
 app = QApplication(sys.argv)
 
 from src.app import MainWindow
-from src.i18n import get_language, set_language
+from src.i18n import set_language
 
 window = MainWindow()
 window.show()

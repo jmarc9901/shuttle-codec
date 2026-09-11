@@ -1,25 +1,40 @@
 [project]
 name = "shuttle-codec"
-version = "1.1.0"
-description = "Una GUI de escritorio moderna y fácil de usar para FFmpeg"
+version = "1.2.0"
+description = "A modern, easy-to-use desktop GUI for FFmpeg"
 readme = "README.md"
-license = { text = "Apache-2.0" }
-requires-python = ">=3.8"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
 dependencies = [
     "PyQt5>=5.15.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/jmarc9901/shuttle-codec"
+Repository = "https://github.com/jmarc9901/shuttle-codec"
+Issues = "https://github.com/jmarc9901/shuttle-codec/issues"
+Changelog = "https://github.com/jmarc9901/shuttle-codec/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
+    "ruff>=0.4",
+    "mypy>=1.8",
+    "types-PyQt5",
 ]
 build = [
     "pyinstaller>=6.0",
+    # PyInstaller uses Pillow to convert logo.png into the platform icon.
+    "pillow>=10.0",
 ]
 
 [project.scripts]
 shuttle-codec = "src.main:main"
+
+[tool.setuptools]
+packages = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -27,6 +42,29 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM"]
+# N802/N806/N803: Qt methods use camelCase by design.
+ignore = ["N802", "N806", "N803"]
+
+[tool.ruff.lint.per-file-ignores]
+# i18n.py holds long unbreakable string literals (filters, HTML, messages).
+"src/i18n.py" = ["E501"]
+# Tests create temp media files with delete=False and clean them up explicitly.
+"tests/*" = ["SIM115"]
+# create_demo.py imports the app after adjusting sys.path/os.chdir on purpose.
+"create_demo.py" = ["E402"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+# Third-party Qt bindings ship no stubs; only our modules are checked.
+exclude = ["build", "dist"]
+
 [build-system]
-requires = ["setuptools>=68.0"]
+requires = ["setuptools>=77.0"]
 build-backend = "setuptools.build_meta"
