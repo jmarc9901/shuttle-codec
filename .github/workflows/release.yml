@@ -117,7 +117,11 @@ jobs:
           # timestamp(s)"). The AppImage is therefore not byte-reproducible; the
           # PyInstaller payload that goes into it is.
           unset SOURCE_DATE_EPOCH
-          mkdir -p AppDir/usr/bin AppDir/usr/share/metainfo AppDir/usr/share/icons/hicolor/256x256/apps
+          # AppStream wants a reverse-DNS component id whose basename matches the
+          # desktop file name, so the two share this id.
+          APP_ID=io.github.jmarc9901.ShuttleCodec
+          mkdir -p AppDir/usr/bin AppDir/usr/share/applications \
+                   AppDir/usr/share/metainfo AppDir/usr/share/icons/hicolor/256x256/apps
           cp dist/shuttle-codec AppDir/usr/bin/
           cp logo.png AppDir/usr/share/icons/hicolor/256x256/apps/shuttle-codec.png
           # appimagetool resolves `Icon=` in the desktop file against the AppDir
@@ -126,29 +130,7 @@ jobs:
           # but not found" (which is why earlier releases had no AppImage).
           cp logo.png AppDir/shuttle-codec.png
           cp logo.png AppDir/.DirIcon
-          # AppStream metadata. appimagetool warns without it and desktop software
-          # centres read it to describe the app. No version here, so it cannot
-          # drift from src/__init__.py.
-          cat > AppDir/usr/share/metainfo/shuttle-codec.appdata.xml <<'EOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <component type="desktop-application">
-            <id>shuttle-codec.desktop</id>
-            <name>Shuttle Codec</name>
-            <summary>Convert videos and audio with FFmpeg</summary>
-            <metadata_license>CC0-1.0</metadata_license>
-            <project_license>GPL-3.0-or-later</project_license>
-            <description>
-              <p>
-                Shuttle Codec is a desktop front-end for FFmpeg that converts video,
-                audio and image files without requiring a terminal.
-              </p>
-            </description>
-            <launchable type="desktop-id">shuttle-codec.desktop</launchable>
-            <url type="homepage">https://github.com/jmarc9901/shuttle-codec</url>
-            <content_rating type="oars-1.1"/>
-          </component>
-          EOF
-          cat > AppDir/shuttle-codec.desktop <<'EOF'
+          cat > "AppDir/usr/share/applications/$APP_ID.desktop" <<'EOF'
           [Desktop Entry]
           Type=Application
           Name=Shuttle Codec
@@ -157,6 +139,34 @@ jobs:
           Icon=shuttle-codec
           Categories=AudioVideo;Video;
           Terminal=false
+          EOF
+          # A copy at the AppDir root too: that is where the AppImage desktop
+          # integration looks for it, while appstreamcli reads this one.
+          cp "AppDir/usr/share/applications/$APP_ID.desktop" AppDir/
+          # AppStream metadata. appimagetool runs appstreamcli over it and fails
+          # the build on warnings, and desktop software centres read it to describe
+          # the app. No version here, so it cannot drift from src/__init__.py.
+          cat > "AppDir/usr/share/metainfo/$APP_ID.appdata.xml" <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <component type="desktop-application">
+            <id>io.github.jmarc9901.ShuttleCodec.desktop</id>
+            <name>Shuttle Codec</name>
+            <summary>Convert videos and audio with FFmpeg</summary>
+            <metadata_license>CC0-1.0</metadata_license>
+            <project_license>GPL-3.0-or-later</project_license>
+            <developer id="io.github.jmarc9901">
+              <name>jmarc9901</name>
+            </developer>
+            <description>
+              <p>
+                Shuttle Codec is a desktop front-end for FFmpeg that converts video,
+                audio and image files without requiring a terminal.
+              </p>
+            </description>
+            <launchable type="desktop-id">io.github.jmarc9901.ShuttleCodec.desktop</launchable>
+            <url type="homepage">https://github.com/jmarc9901/shuttle-codec</url>
+            <content_rating type="oars-1.1"/>
+          </component>
           EOF
           cat > AppDir/AppRun <<'EOF'
           #!/bin/sh
