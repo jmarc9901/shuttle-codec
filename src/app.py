@@ -212,6 +212,7 @@ class MainWindow(QMainWindow):
         self.preset_section.setVisible(self.simple_mode)
         self.content_splitter.setVisible(not self.simple_mode)
         self._update_mode_visibility()
+        self._apply_accessibility()
 
     def _create_header(self, layout: QVBoxLayout) -> None:
         header = QFrame()
@@ -242,6 +243,7 @@ class MainWindow(QMainWindow):
         idx = self.lang_combo.findData(get_language())
         if idx >= 0:
             self.lang_combo.setCurrentIndex(idx)
+        self.lang_combo.setToolTip(tr("tip_language"))
         self.lang_combo.currentIndexChanged.connect(self._on_language_change)
         self.lang_combo.setFixedWidth(100)
 
@@ -372,6 +374,8 @@ class MainWindow(QMainWindow):
 
         self._update_estimate()
         self._update_mode_visibility()
+        self.lang_combo.setToolTip(tr("tip_language"))
+        self._apply_accessibility()
 
     def _create_file_section(self, layout: QHBoxLayout) -> None:
         file_frame = QFrame()
@@ -771,9 +775,15 @@ class MainWindow(QMainWindow):
             h, m, s = diff // 3600, (diff % 3600) // 60, diff % 60
             self.trim_duration.setText(f"{h:02d}:{m:02d}:{s:02d}")
             self.trim_duration.setStyleSheet(f"color: {SUCCESS}; font-weight: bold; font-size: 13px;")
+            self.trim_duration.setToolTip("")
+            self.trim_duration.setAccessibleDescription(tr("label_trim_duration"))
         else:
+            # Colour alone cannot convey this (colour blindness, screen reader),
+            # so the invalid range is stated in words as well.
             self.trim_duration.setText("00:00:00")
             self.trim_duration.setStyleSheet(f"color: {DANGER}; font-weight: bold; font-size: 13px;")
+            self.trim_duration.setToolTip(tr("trim_invalid"))
+            self.trim_duration.setAccessibleDescription(tr("trim_invalid"))
 
     def _create_batch_section(self, layout: QVBoxLayout) -> None:
         self.batch_group = QGroupBox(tr("group_batch"))
@@ -861,6 +871,72 @@ class MainWindow(QMainWindow):
         log_layout.addWidget(self.log_output)
 
         layout.addWidget(self.log_group)
+
+    def _append_log(self, text: str) -> None:
+        """
+        Append one line to the log panel, prefixed with its timestamp.
+
+        Indented lines are continuations of the previous entry (batch results,
+        command arguments) and keep their alignment instead of getting their own
+        timestamp. A bug report is much easier to read with times in it.
+        """
+        stamp = ""
+        if text.strip() and text[:1] not in (" ", "\t"):
+            stamp = f"[{QTime.currentTime().toString('HH:mm:ss')}] "
+        self.log_output.append(f"{stamp}{text}")
+
+    def _apply_accessibility(self) -> None:
+        """
+        Name and describe every interactive control for assistive technology.
+
+        Qt's accessibility bridge (screen readers on Windows, macOS and Linux)
+        reads `accessibleName`/`accessibleDescription`; without them a widget is
+        announced as an unlabelled "button", "combo box" or "slider", so the app
+        stays unusable without sight even though every control has a visible
+        label. Re-run on each language switch, since these strings are tr().
+        """
+        controls: list[tuple[QWidget, str, str | None]] = [
+            (self.file_path, "file_placeholder", "tip_browse"),
+            (self.browse_btn, "btn_browse", "tip_browse"),
+            (self.clear_btn, "tip_cancel_sel", "tip_clear"),
+            (self.report_btn, "btn_report", "tip_report"),
+            (self.lang_combo, "label_language", "tip_language"),
+            (self.expert_btn, "btn_expert_show", "tip_expert_mode"),
+            (self.video_format, "label_format", "tip_format"),
+            (self.video_preset, "label_preset", "tip_preset"),
+            (self.video_crf, "label_quality", "tip_crf"),
+            (self.video_resolution, "label_resolution", "tip_resolution"),
+            (self.video_fps, "label_fps", "tip_fps"),
+            (self.video_keep_audio, "chk_keep_audio", "tip_keep_audio"),
+            (self.hw_check, "chk_hw_accel", "tip_hw_accel"),
+            (self.extract_audio_check, "chk_extract_audio", "tip_extract_audio"),
+            (self.target_check, "chk_target_size", "tip_target_size"),
+            (self.target_size, "label_target_size", "tip_target_size"),
+            (self.frame_check, "chk_frame_export", "tip_frame_export"),
+            (self.frame_time, "label_frame_time", None),
+            (self.image_format, "label_format", "tip_format"),
+            (self.image_quality, "label_quality", "tip_image_quality"),
+            (self.image_resolution, "label_resolution", "tip_resolution"),
+            (self.audio_format, "label_format", "tip_format"),
+            (self.audio_bitrate, "label_bitrate", None),
+            (self.trim_enable, "chk_trim_enable", None),
+            (self.trim_start, "label_trim_start", None),
+            (self.trim_end, "label_trim_end", None),
+            (self.batch_list, "group_batch", None),
+            (self.add_batch_btn, "btn_add_batch", None),
+            (self.remove_batch_btn, "btn_remove_batch", None),
+            (self.clear_batch_btn, "btn_clear_batch", None),
+            (self.shutdown_check, "chk_shutdown", "tip_shutdown"),
+            (self.progress_bar, "group_progress", None),
+            (self.convert_btn, "btn_convert", "tip_convert"),
+            (self.cancel_btn, "btn_cancel", "tip_cancel"),
+            (self.log_output, "group_log", None),
+        ]
+        for widget, name_key, description_key in controls:
+            widget.setAccessibleName(tr(name_key))
+            if description_key:
+                widget.setAccessibleDescription(tr(description_key))
+        self._update_trim_duration()
 
     def _quit(self) -> None:
         """Quit shortcut handler (QWidget.close returns bool, which Qt's
@@ -1250,7 +1326,7 @@ class MainWindow(QMainWindow):
             info_lines.append(tr("log_file_bitrate", int(bitrate) // 1000))
         if duration:
             info_lines.append(tr("log_file_duration", self.ffmpeg.get_duration_string(duration)))
-        self.log_output.append(" | ".join(info_lines))
+        self._append_log(" | ".join(info_lines))
 
         self._auto_detect_best(codecs, width, height)
         self._update_mode_visibility()
@@ -1343,14 +1419,14 @@ class MainWindow(QMainWindow):
         elif vcodec and "264" in vcodec and self.video_format.findText("MP4 (H.264)") >= 0:
             self.video_format.setCurrentText("MP4 (H.264)")
 
-    def dragEnterEvent(self, event: QDragEnterEvent | None) -> None:  # type: ignore[override]
+    def dragEnterEvent(self, event: QDragEnterEvent | None) -> None:
         if event is None:
             return
         mime = event.mimeData()
         if mime is not None and mime.hasUrls():
             event.acceptProposedAction()
 
-    def dropEvent(self, event: QDropEvent | None) -> None:  # type: ignore[override]
+    def dropEvent(self, event: QDropEvent | None) -> None:
         if event is None:
             return
         mime = event.mimeData()
@@ -1421,7 +1497,7 @@ class MainWindow(QMainWindow):
         for path in paths:
             self._add_single_to_batch(path)
         if paths:
-            self.log_output.append(tr("log_batch_restored", len(paths)))
+            self._append_log(tr("log_batch_restored", len(paths)))
 
     def _update_batch_ui(self) -> None:
         """Refresh the convert button for the current queue and mode.
@@ -1572,7 +1648,7 @@ class MainWindow(QMainWindow):
         if mode != "video" or not settings.get("target_size_mb"):
             return
         if self.ffmpeg.video_target_bitrate(settings, input_file, trim_duration) <= 0:
-            self.log_output.append(tr("log_target_size_fallback", os.path.basename(input_file)))
+            self._append_log(tr("log_target_size_fallback", os.path.basename(input_file)))
 
     def start_conversion(self) -> None:
         if not self.ffmpeg.check_ffmpeg():
@@ -1637,7 +1713,7 @@ class MainWindow(QMainWindow):
         self.batch_progress.setVisible(True)
         self.batch_progress.setMaximum(len(items))
         self.batch_progress.setValue(0)
-        self.log_output.append(tr("msg_batch_started", len(items)))
+        self._append_log(tr("msg_batch_started", len(items)))
 
         # Connect once — signals stay connected for the window's lifetime.
         if not self._batch_signals_connected:
@@ -1650,7 +1726,7 @@ class MainWindow(QMainWindow):
     def _on_batch_file_finished(self, index: int, success: bool, outpath: str) -> None:
         self.batch_progress.setValue(index + 1)
         status = "✅" if success else "❌"
-        self.log_output.append(
+        self._append_log(
             f"  {status} [{index + 1}/{self.batch_progress.maximum()}] {os.path.basename(outpath)}"
         )
         item = self.batch_list.item(index)
@@ -1662,7 +1738,7 @@ class MainWindow(QMainWindow):
         self.convert_btn.setEnabled(True)
         self.cancel_btn.setEnabled(False)
         self.batch_progress.setVisible(False)
-        self.log_output.append(tr("msg_batch_done", success_count, total))
+        self._append_log(tr("msg_batch_done", success_count, total))
         self.status_bar.showMessage(tr("msg_batch_status", success_count, total))
         if self.batch_manager.cancelled:
             # A cancelled batch also reaches this slot: reporting "completed"
@@ -1681,7 +1757,7 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(0)
         self.eta_label.setText("")
         self.speed_label.setText("")
-        self.log_output.append(f"\n{'─' * 50}")
+        self._append_log(f"\n{'─' * 50}")
 
         # When the job uses a GPU encoder, keep a CPU-only equivalent ready: it
         # is used automatically if the hardware encoder fails at runtime.
@@ -1692,7 +1768,7 @@ class MainWindow(QMainWindow):
         )
         self.current_thread.progress.connect(self._on_progress)
         self.current_thread.conversion_done.connect(self._on_conversion_finished)
-        self.current_thread.log.connect(self.log_output.append)
+        self.current_thread.log.connect(self._append_log)
         self.current_thread.eta_update.connect(self._on_eta_update)
         self.current_thread.start()
 
@@ -1728,7 +1804,7 @@ class MainWindow(QMainWindow):
             return
         command = shutdown_command()
         if command is None:
-            self.log_output.append(tr("msg_shutdown_unavailable"))
+            self._append_log(tr("msg_shutdown_unavailable"))
             return
         self._show_shutdown_dialog(command)
 
@@ -1759,12 +1835,12 @@ class MainWindow(QMainWindow):
         timer.stop()
 
         if box.clickedButton() is cancel_button:
-            self.log_output.append(tr("msg_shutdown_cancelled"))
+            self._append_log(tr("msg_shutdown_cancelled"))
             return
         try:
             subprocess.Popen(command)  # noqa: S603
         except OSError:
-            self.log_output.append(tr("msg_shutdown_unavailable"))
+            self._append_log(tr("msg_shutdown_unavailable"))
 
     def report_problem(self) -> None:
         """Open a GitHub bug report pre-filled with diagnostics and the log tail."""
@@ -1776,7 +1852,7 @@ class MainWindow(QMainWindow):
             log_text=self.log_output.toPlainText(),
         )
         if QDesktopServices.openUrl(QUrl(build_issue_url(diagnostics, title="[Bug] "))):
-            self.log_output.append(tr("msg_report_done"))
+            self._append_log(tr("msg_report_done"))
             return
         clipboard = QApplication.clipboard()
         if clipboard is not None:
@@ -1786,9 +1862,9 @@ class MainWindow(QMainWindow):
     def cancel_conversion(self) -> None:
         if self.ffmpeg:
             self.ffmpeg.cancel_conversion()
-        self.log_output.append(tr("msg_cancelled"))
+        self._append_log(tr("msg_cancelled"))
         if self.batch_manager.is_running():
             self.batch_manager.cancel()
-            self.log_output.append(tr("msg_batch_cancelled"))
+            self._append_log(tr("msg_batch_cancelled"))
             return
         self._on_conversion_finished(False, tr("msg_cancelled"), "")

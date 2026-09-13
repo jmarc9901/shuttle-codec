@@ -1,52 +1,35 @@
-name: Pull Request
-description: Enviar cambios al proyecto
-title: "[FEATURE/FIX] Título descriptivo"
-body:
-  - type: markdown
-    attributes:
-      value: |
-        Gracias por tu contribución. Por favor completa esta información.
+<!--
+Gracias por tu contribución. Nota: este archivo debe ser Markdown, no un
+formulario YAML (GitHub solo interpreta como formulario los de ISSUE_TEMPLATE/).
+-->
 
-  - type: textarea
-    id: summary
-    attributes:
-      label: Resumen
-      description: Explica qué hace este PR y por qué es necesario.
-    validations:
-      required: true
+## Resumen
 
-  - type: dropdown
-    id: type
-    attributes:
-      label: Tipo de cambio
-      multiple: false
-      options:
-        - Bug fix
-        - Nueva feature
-        - Refactor
-        - Documentación
-        - Tests
-        - Otro
+<!-- Qué hace este PR y por qué es necesario. -->
 
-  - type: textarea
-    id: testing
-    attributes:
-      label: Testing
-      description: ¿Cómo verificaste que los cambios funcionan?
-      placeholder: |
-        - Ejecuté `python -m pytest tests/ -v`
-        - Probé manualmente la conversión de MP4 a GIF
-    validations:
-      required: true
+## Tipo de cambio
 
-  - type: checkboxes
-    id: checklist
-    attributes:
-      label: Checklist
-      options:
-        - label: Los tests pasan (`python -m pytest tests/ -v`)
-          required: true
-        - label: El código tiene type hints
-          required: true
-        - label: No hay errores de sintaxis
-          required: true
+- [ ] Corrección de bug
+- [ ] Nueva funcionalidad
+- [ ] Refactor
+- [ ] Documentación
+- [ ] Tests / CI
+- [ ] Otro:
+
+## Cómo lo he verificado
+
+<!-- Qué pruebas has hecho: automáticas y manuales. -->
+
+## Checklist
+
+- [ ] `python -m pytest tests/ -v` pasa
+- [ ] `ruff check .` no reporta nada
+- [ ] `mypy src/` (modo strict) no reporta nada
+- [ ] He añadido o actualizado los tests que cubren el cambio
+- [ ] Si añadí texto de interfaz, está en **ambos** idiomas (`src/i18n.py`)
+- [ ] Si añadí un contenedor, actualicé `COPY_SAFE_AUDIO_CODECS`
+- [ ] He actualizado la documentación afectada (README, `docs/`, `CHANGELOG.md`)
+
+## Issue relacionado
+
+<!-- Closes #123 -->

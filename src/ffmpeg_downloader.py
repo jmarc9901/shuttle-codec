@@ -7,6 +7,7 @@ PyInstaller-frozen runs) or installed system-wide on PATH.
 
 import os
 import sys
+from collections.abc import Callable
 from shutil import which
 from typing import NamedTuple
 
@@ -60,7 +61,10 @@ def find_ffmpeg() -> tuple[str | None, str | None]:
     return status.ffmpeg, status.ffprobe
 
 
-def ensure_ffmpeg(progress_callback=None) -> FFmpegStatus:
+ProgressCallback = Callable[[int, str], None]
+
+
+def ensure_ffmpeg(progress_callback: ProgressCallback | None = None) -> FFmpegStatus:
     """Locate FFmpeg or raise RuntimeError with a translated message."""
     status = find_ffmpeg_status()
     if status.ok:

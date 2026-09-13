@@ -6,8 +6,45 @@ on:
   pull_request:
     branches: [main]
 
+# Least privilege: this workflow only ever reads the repository.
+permissions:
+  contents: read
+
+# A new push supersedes the previous run of the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
 jobs:
+  lint:
+    name: Lint and type check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov ruff mypy types-PyQt5
+
+      - name: Lint (ruff, including the security rules)
+        run: ruff check .
+
+      - name: Type check (mypy, strict - see pyproject.toml)
+        run: mypy src/
+
   test:
+    name: Tests (${{ matrix.os }} / ${{ matrix.python-version }})
     strategy:
       fail-fast: false
       matrix:
@@ -23,6 +60,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
 
       - name: Install system dependencies (Linux)
         if: runner.os == 'Linux'
@@ -34,25 +72,82 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-cov ruff mypy types-PyQt5
 
-      - name: Lint with ruff
-        run: ruff check .
-
-      - name: Type check with mypy
-        if: runner.os == 'Linux' && matrix.python-version == '3.12'
-        run: mypy src/
-
       - name: Test with pytest
-        run: python -m pytest tests/ -v --tb=short
+        # Media integration tests skip themselves when FFmpeg is unavailable, so
+        # the same suite runs everywhere; `-ra` prints what was skipped and why.
+        run: python -m pytest tests/ -v --tb=short -ra --durations=10
 
-      # Coverage runs once, on a single matrix cell, to keep CI fast.
-      - name: Coverage gate
-        if: runner.os == 'Linux' && matrix.python-version == '3.12'
-        run: python -m pytest tests/ -q --cov=src --cov-report=term-missing
+  coverage:
+    name: Coverage gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libxkbcommon0 libxcb-cursor0 ffmpeg
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      - name: Enforce the coverage floor
+        run: python -m pytest tests/ -q --cov=src --cov-report=term-missing --cov-report=xml
+
+      - name: Upload the coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+          if-no-files-found: ignore
+
+  package:
+    name: Package metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Build the wheel and validate its metadata
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build --wheel
+          python -m twine check dist/*
+
+      - name: Check the wheel version matches the package
+        run: |
+          python - <<'PY'
+          import glob, re, zipfile
+
+          import src
+
+          with zipfile.ZipFile(glob.glob("dist/*.whl")[0]) as wheel:
+              metadata = wheel.read(
+                  next(n for n in wheel.namelist() if n.endswith("METADATA"))
+              ).decode()
+          version = re.search(r"^Version: (.+)$", metadata, re.M)
+          assert version is not None
+          assert version.group(1) == src.__version__, (version.group(1), src.__version__)
+          print("wheel version:", version.group(1))
+          PY
 
   build:
+    name: Package the Windows executable
     # Guards the PyInstaller path: packaging breaks are only visible here.
     runs-on: windows-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -60,6 +155,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: pip
 
       - name: Install build dependencies
         run: |

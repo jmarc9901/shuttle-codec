@@ -86,7 +86,7 @@ class FFmpegHandler:
     def __init__(self) -> None:
         self.ffmpeg_path: str = "ffmpeg"
         self.ffprobe_path: str = "ffprobe"
-        self._process: subprocess.Popen | None = None
+        self._process: subprocess.Popen[str] | None = None
         self._cancelled: bool = False
         self._hw_cache: str | None = None
         self._encoders_cache: str | None = None

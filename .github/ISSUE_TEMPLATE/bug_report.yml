@@ -7,6 +7,10 @@ body:
       value: |
         Gracias por reportar un bug. Por favor completa la siguiente información.
 
+        Consejo: el botón **🐞 Reportar** de la propia aplicación rellena la
+        versión, el sistema, las versiones de Python/Qt/FFmpeg y las últimas
+        líneas del registro. Si lo usas, solo tienes que describir el problema.
+
   - type: input
     id: version
     attributes:

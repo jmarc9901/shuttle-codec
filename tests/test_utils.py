@@ -142,19 +142,19 @@ class TestFilterExistingFiles(unittest.TestCase):
 
 class TestShutdownCommand(unittest.TestCase):
     def test_windows(self):
-        with patch("src.utils.sys.platform", "win32"):
+        with patch("src.utils.PLATFORM", "win32"):
             self.assertEqual(shutdown_command(), ["shutdown", "/s", "/t", "0"])
 
     def test_macos(self):
-        with patch("src.utils.sys.platform", "darwin"):
+        with patch("src.utils.PLATFORM", "darwin"):
             self.assertEqual(shutdown_command()[0], "osascript")
 
     def test_linux_prefers_systemctl(self):
-        with patch("src.utils.sys.platform", "linux"), patch("src.utils.shutil.which", return_value="/bin/systemctl"):
+        with patch("src.utils.PLATFORM", "linux"), patch("src.utils.shutil.which", return_value="/bin/systemctl"):
             self.assertEqual(shutdown_command(), ["systemctl", "poweroff"])
 
     def test_unsupported_platform_returns_none(self):
-        with patch("src.utils.sys.platform", "linux"), patch("src.utils.shutil.which", return_value=None):
+        with patch("src.utils.PLATFORM", "linux"), patch("src.utils.shutil.which", return_value=None):
             self.assertIsNone(shutdown_command())
 
 

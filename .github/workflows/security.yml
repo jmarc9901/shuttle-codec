@@ -1,0 +1,39 @@
+name: Security
+
+on:
+  # Dependency advisories are published on their own schedule, so a weekly audit
+  # catches them without blocking unrelated pull requests.
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "pyproject.toml"
+      - "requirements.txt"
+      - ".github/workflows/security.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install pip-audit
+        run: |
+          python -m pip install --upgrade pip
+          pip install pip-audit
+
+      - name: Audit the runtime dependencies
+        # `--strict` fails the job on any known advisory in the dependency tree.
+        run: pip-audit -r requirements.txt --strict

@@ -1,0 +1,9 @@
+# Default owner for everything in the repository.
+* @jmarc9901
+
+# Distribution and supply chain deserve an explicit review.
+/.github/        @jmarc9901
+/installer/      @jmarc9901
+/download_ffmpeg.py @jmarc9901
+/pyproject.toml  @jmarc9901
+/THIRD_PARTY_NOTICES.md @jmarc9901

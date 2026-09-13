@@ -7,6 +7,36 @@ readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 requires-python = ">=3.10"
+authors = [
+    { name = "JMarc" },
+]
+keywords = [
+    "ffmpeg",
+    "video",
+    "audio",
+    "converter",
+    "transcoding",
+    "gui",
+    "pyqt5",
+    "desktop",
+]
+# No `License ::` classifier: the SPDX `license` expression above is the modern
+# equivalent and setuptools deprecates keeping both.
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Sound/Audio :: Conversion",
+    "Topic :: Multimedia :: Video :: Conversion",
+]
 dependencies = [
     "PyQt5>=5.15.0",
 ]
@@ -23,6 +53,7 @@ dev = [
     "pytest-cov>=4.0",
     "ruff>=0.4",
     "mypy>=1.8",
+    "pre-commit>=3.7",
     "types-PyQt5",
 ]
 build = [
@@ -86,6 +117,10 @@ ignore = ["N802", "N806", "N803", "S603", "S607"]
 [tool.mypy]
 python_version = "3.10"
 ignore_missing_imports = true
+# `strict` (untyped defs, Any leaking, stale `type: ignore`, ...) is enforced on
+# the application code, so a wrong annotation fails CI instead of drifting.
+strict = true
+warn_unreachable = true
 # Third-party Qt bindings ship no stubs; only our modules are checked.
 exclude = ["build", "dist"]
 

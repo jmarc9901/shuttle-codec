@@ -5,8 +5,9 @@ on:
     tags:
       - 'v*'
 
+# Least privilege by default; each job widens it only where it must.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -15,6 +16,11 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      # Build provenance attestation (SLSA) signs with the workflow identity.
+      id-token: write
+      attestations: write
 
     # Empty unless the signing secrets exist; job-level env is what makes the
     # `env.X != ''` guards in the steps below work.
@@ -24,11 +30,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: pip
 
       - name: Read the app version
         id: version
@@ -42,6 +51,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller pillow
+
+      - name: Make the build reproducible
+        shell: bash
+        # PyInstaller embeds timestamps; deriving them from the tag commit makes
+        # two builds of the same commit byte-identical.
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
 
       # Optional integrity pinning: set the repository variables
       # FFMPEG_BUILD_TAG and FFMPEG_ARCHIVE_SHA256 to make the build
@@ -109,6 +124,13 @@ jobs:
           chmod +x appimagetool
           ./appimagetool --appimage-extract-and-run AppDir dist/shuttle-codec-x86_64.AppImage
 
+      - name: Record the exact dependency versions
+        shell: bash
+        # A build manifest: the resolved versions behind this artifact, which is
+        # what an SBOM generator (or a post-mortem) needs. Written after the
+        # build, because PyInstaller recreates dist/.
+        run: python -m pip freeze > dist/pip-freeze.txt
+
       - name: Generate SHA-256 checksums
         shell: bash
         run: |
@@ -116,11 +138,16 @@ jobs:
           import hashlib, pathlib
           lines = []
           for path in sorted(pathlib.Path("dist").iterdir()):
-              if path.is_file():
+              if path.is_file() and path.name != "SHA256SUMS.txt":
                   lines.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}")
           pathlib.Path("dist/SHA256SUMS.txt").write_text("\n".join(lines) + "\n")
           print("\n".join(lines))
           PY
+
+      - name: Attest the build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/shuttle-codec*
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -151,6 +178,7 @@ jobs:
             shuttle-codec-Windows/shuttle-codec.exe
             shuttle-codec-Windows/shuttle-codec-*-setup.exe
             shuttle-codec-Windows/SHA256SUMS.txt
+            shuttle-codec-Windows/pip-freeze.txt
             shuttle-codec-macOS/shuttle-codec-macos.zip
             shuttle-codec-macOS/shuttle-codec
             shuttle-codec-Linux/shuttle-codec

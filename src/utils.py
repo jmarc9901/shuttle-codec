@@ -77,7 +77,9 @@ def open_folder(path: str) -> bool:
         # Non-Qt context: fall back to OS commands
         try:
             if sys.platform == "win32":
-                os.startfile(path)  # type: ignore[attr-defined]  # noqa: S606
+                # `unused-ignore`: the attribute only exists on Windows typeshed,
+                # so the ignore itself trips strict mode on a Windows machine.
+                os.startfile(path)  # type: ignore[attr-defined, unused-ignore]  # noqa: S606
             elif sys.platform == "darwin":
                 import subprocess
                 subprocess.Popen(["open", path])  # noqa: S603
@@ -104,6 +106,12 @@ def filter_existing_files(paths: Iterable[str]) -> list[str]:
     return [p for p in paths if isinstance(p, str) and os.path.isfile(p)]
 
 
+# Copy of `sys.platform` typed as a plain string: typeshed narrows the original
+# to the platform running mypy, which would mark the other branches of this
+# module as unreachable (`warn_unreachable`) on every OS but one.
+PLATFORM: str = sys.platform
+
+
 def shutdown_command() -> list[str] | None:
     """
     Return the platform command that powers the machine off right now.
@@ -111,9 +119,9 @@ def shutdown_command() -> list[str] | None:
     Returns None when no supported command exists; callers must treat that
     as "cannot shut down" rather than silently doing nothing.
     """
-    if sys.platform == "win32":
+    if PLATFORM == "win32":
         return ["shutdown", "/s", "/t", "0"]
-    if sys.platform == "darwin":
+    if PLATFORM == "darwin":
         return ["osascript", "-e", 'tell application "System Events" to shut down']
     if shutil.which("systemctl"):
         return ["systemctl", "poweroff"]

@@ -3,3 +3,9 @@ contact_links:
   - name: GitHub Discussions
     url: https://github.com/jmarc9901/shuttle-codec/discussions
     about: Please ask questions and discuss features here
+  - name: Preguntas frecuentes y problemas comunes
+    url: https://github.com/jmarc9901/shuttle-codec/blob/main/docs/TROUBLESHOOTING.md
+    about: Revisa la guía de problemas (ES/EN) antes de abrir un issue
+  - name: Reportar una vulnerabilidad
+    url: https://github.com/jmarc9901/shuttle-codec/security/advisories/new
+    about: Los problemas de seguridad se reportan en privado, nunca en un issue público

@@ -1,0 +1,39 @@
+# Install once with `pre-commit install`; the hooks then run on every commit.
+# Everything CI enforces (ruff with the security rules, mypy strict) is here too,
+# so a contributor sees the failure before pushing.
+default_language_version:
+  python: python3.11
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        # The bundled FFmpeg binaries are ~140 MB and are downloaded, never
+        # committed; anything over 512 KB in a commit is almost certainly one.
+        args: ["--maxkb=512"]
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+      - id: check-json
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: mixed-line-ending
+        args: ["--fix=crlf"]
+      - id: detect-private-key
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        name: ruff (lint, including the security rules)
+        args: ["--fix"]
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy (strict, src/)
+        entry: python -m mypy src/
+        language: system
+        pass_filenames: false
+        types: [python]

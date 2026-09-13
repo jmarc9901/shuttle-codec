@@ -535,6 +535,52 @@ class TestMainWindowSmoke(unittest.TestCase):
             self.window._show_shutdown_dialog(["systemctl", "poweroff"])
         popen.assert_not_called()
 
+    # ─── log and accessibility ───────────────────────────────────────────────
+    def test_log_entries_are_timestamped(self) -> None:
+        self.window.log_output.clear()
+        self.window._append_log("hola")
+        self.assertRegex(self.window.log_output.toPlainText(), r"^\[\d{2}:\d{2}:\d{2}\] hola$")
+
+    def test_indented_log_lines_keep_their_alignment(self) -> None:
+        """Batch results and command arguments are continuations, not entries."""
+        self.window.log_output.clear()
+        self.window._append_log("  ✅ [1/2] out.mp4")
+        self.assertTrue(self.window.log_output.toPlainText().startswith("  ✅"))
+
+    def test_main_controls_have_accessible_names(self) -> None:
+        """A screen reader announces an unnamed widget as just "button"."""
+        controls = (
+            self.window.convert_btn, self.window.cancel_btn, self.window.browse_btn,
+            self.window.report_btn, self.window.lang_combo, self.window.expert_btn,
+            self.window.video_format, self.window.video_crf, self.window.video_resolution,
+            self.window.image_format, self.window.image_quality, self.window.audio_format,
+            self.window.target_size, self.window.trim_start, self.window.trim_end,
+            self.window.batch_list, self.window.progress_bar, self.window.log_output,
+        )
+        for widget in controls:
+            with self.subTest(widget=type(widget).__name__):
+                self.assertTrue(widget.accessibleName(), "widget has no accessible name")
+
+    def test_accessible_names_follow_the_language(self) -> None:
+        from src.i18n import LANG_EN, set_language
+
+        set_language(LANG_EN)
+        self.window.retranslate_ui()
+        self.assertIn("Start", self.window.convert_btn.accessibleName())
+
+    def test_invalid_trim_range_is_stated_in_words(self) -> None:
+        """Colour alone cannot carry this: the tooltip says what is wrong."""
+        from src.i18n import tr
+
+        self.window.trim_start.setTime(QTime(0, 0, 10))
+        self.window.trim_end.setTime(QTime(0, 0, 5))
+        self.assertEqual(self.window.trim_duration.toolTip(), tr("trim_invalid"))
+        self.assertEqual(self.window.trim_duration.accessibleDescription(), tr("trim_invalid"))
+
+        self.window.trim_end.setTime(QTime(0, 0, 20))
+        self.assertEqual(self.window.trim_duration.toolTip(), "")
+        self.assertEqual(self.window.trim_duration.text(), "00:00:10")
+
 
 class TestMainEntryPoint(unittest.TestCase):
     @unittest.skipUnless(HAS_QT, "Qt offscreen platform not available")
