@@ -111,7 +111,13 @@ jobs:
         if: runner.os == 'Linux'
         continue-on-error: true
         run: |
-          mkdir -p AppDir/usr/bin AppDir/usr/share/icons/hicolor/256x256/apps
+          # appimagetool hands mksquashfs its own timestamps, and mksquashfs
+          # refuses to run while SOURCE_DATE_EPOCH is set as well ("SOURCE_DATE_EPOCH
+          # and command line options can't be used at the same time to set
+          # timestamp(s)"). The AppImage is therefore not byte-reproducible; the
+          # PyInstaller payload that goes into it is.
+          unset SOURCE_DATE_EPOCH
+          mkdir -p AppDir/usr/bin AppDir/usr/share/metainfo AppDir/usr/share/icons/hicolor/256x256/apps
           cp dist/shuttle-codec AppDir/usr/bin/
           cp logo.png AppDir/usr/share/icons/hicolor/256x256/apps/shuttle-codec.png
           # appimagetool resolves `Icon=` in the desktop file against the AppDir
@@ -120,6 +126,28 @@ jobs:
           # but not found" (which is why earlier releases had no AppImage).
           cp logo.png AppDir/shuttle-codec.png
           cp logo.png AppDir/.DirIcon
+          # AppStream metadata. appimagetool warns without it and desktop software
+          # centres read it to describe the app. No version here, so it cannot
+          # drift from src/__init__.py.
+          cat > AppDir/usr/share/metainfo/shuttle-codec.appdata.xml <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <component type="desktop-application">
+            <id>shuttle-codec.desktop</id>
+            <name>Shuttle Codec</name>
+            <summary>Convert videos and audio with FFmpeg</summary>
+            <metadata_license>CC0-1.0</metadata_license>
+            <project_license>GPL-3.0-or-later</project_license>
+            <description>
+              <p>
+                Shuttle Codec is a desktop front-end for FFmpeg that converts video,
+                audio and image files without requiring a terminal.
+              </p>
+            </description>
+            <launchable type="desktop-id">shuttle-codec.desktop</launchable>
+            <url type="homepage">https://github.com/jmarc9901/shuttle-codec</url>
+            <content_rating type="oars-1.1"/>
+          </component>
+          EOF
           cat > AppDir/shuttle-codec.desktop <<'EOF'
           [Desktop Entry]
           Type=Application

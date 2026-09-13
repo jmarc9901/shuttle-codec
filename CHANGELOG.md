@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- **Release dry run**: the release workflow accepts a manual
+  (`workflow_dispatch`) trigger that builds, signs and attests the three platform
+  artifacts but skips the publish job, so a packaging change can be validated
+  without cutting a version.
+
 ### Changed
 - **`build.py` is now `build_exe.py`**: a top-level `build` module shadows the
   PyPI package of the same name, so on a checkout `python -m build` imported the
@@ -25,11 +31,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dependency installation died in all 12 matrix cells before any test ran. PyQt5
   ships its own `.pyi` stubs since 5.15.7, so the package is gone from CI, the
   `dev` extra and the third-party notices.
-- **The Linux AppImage was never produced**: `appimagetool` aborts when the icon
-  named in the `.desktop` file is not in the AppDir *root* — only the hicolor
-  theme copy existed. The AppDir now also carries `shuttle-codec.png`, `.DirIcon`
-  and an explicit `AppRun`, and the job warns when it still builds nothing
-  instead of failing silently behind `continue-on-error`.
+- **The Linux AppImage was never produced** (two independent causes, both
+  reproducible on the runner): `appimagetool` aborts when the icon named in the
+  `.desktop` file is not in the AppDir *root* (only the hicolor theme copy
+  existed), and `mksquashfs` refuses to run when `SOURCE_DATE_EPOCH` is set *and*
+  appimagetool passes its own timestamps. The AppDir now carries
+  `shuttle-codec.png`, `.DirIcon`, an explicit `AppRun` and AppStream metadata,
+  the step unsets `SOURCE_DATE_EPOCH`, and the job warns when it still builds
+  nothing instead of failing silently behind `continue-on-error`.
 
 ## v1.3.0 (2026-09-12)
 
