@@ -14,7 +14,7 @@ else to install.
 |----------|-----|
 | Windows | Download `shuttle-codec-<version>-setup.exe` from the [releases page](https://github.com/jmarc9901/shuttle-codec/releases) and run it, or use the portable `shuttle-codec.exe` |
 | macOS | Download `shuttle-codec-macos.zip`, unzip it and drag the binary wherever you like |
-| Linux | Download `shuttle-codec-x86_64.AppImage`, `chmod +x` it and run it |
+| Linux | Download `shuttle-codec-x86_64.AppImage` (built best-effort), `chmod +x` it and run it. If a release has no AppImage, the plain `shuttle-codec` binary is always published and works the same way |
 
 > The first launch of an unsigned build can be flagged by SmartScreen
 > ("Windows protected your PC" → *More info* → *Run anyway*) or by Gatekeeper.

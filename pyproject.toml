@@ -54,7 +54,8 @@ dev = [
     "ruff>=0.4",
     "mypy>=1.8",
     "pre-commit>=3.7",
-    "types-PyQt5",
+    # No stub package: PyQt5 ships its own .pyi files since 5.15.7 (and
+    # `types-PyQt5` is no longer published on PyPI).
 ]
 build = [
     "pyinstaller>=6.0",

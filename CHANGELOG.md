@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-_No changes yet._
+### Fixed
+- **CI failed on every run**: the workflows installed `types-PyQt5`, a stub
+  package that no longer exists on PyPI (`No matching distribution found`), so
+  dependency installation died in all 12 matrix cells before any test ran. PyQt5
+  ships its own `.pyi` stubs since 5.15.7, so the package is gone from CI, the
+  `dev` extra and the third-party notices.
+- **The Linux AppImage was never produced**: `appimagetool` aborts when the icon
+  named in the `.desktop` file is not in the AppDir *root* — only the hicolor
+  theme copy existed. The AppDir now also carries `shuttle-codec.png`, `.DirIcon`
+  and an explicit `AppRun`, and the job warns when it still builds nothing
+  instead of failing silently behind `continue-on-error`.
 
 ## v1.3.0 (2026-09-12)
 

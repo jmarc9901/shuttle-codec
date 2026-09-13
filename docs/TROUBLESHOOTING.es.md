@@ -40,6 +40,10 @@ chmod +x shuttle-codec-x86_64.AppImage
 Si no hay FUSE disponible (habitual en contenedores), ejecútalo con
 `--appimage-extract-and-run`.
 
+Si el release que has descargado no trae AppImage (se compila best-effort), usa
+el binario `shuttle-codec` del mismo release: dale permisos con `chmod +x` y
+ejecútalo, es la misma aplicación.
+
 ## «FFmpeg: ✗» en la cabecera
 
 Shuttle Codec busca los binarios en este orden:

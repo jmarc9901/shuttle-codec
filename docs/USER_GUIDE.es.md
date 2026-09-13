@@ -14,7 +14,7 @@ instalar.
 |-----------|------|
 | Windows | Descarga `shuttle-codec-<versión>-setup.exe` desde la [página de releases](https://github.com/jmarc9901/shuttle-codec/releases) y ejecútalo, o usa el `shuttle-codec.exe` portable |
 | macOS | Descarga `shuttle-codec-macos.zip`, descomprímelo y mueve el binario donde quieras |
-| Linux | Descarga `shuttle-codec-x86_64.AppImage`, dale permisos (`chmod +x`) y ejecútalo |
+| Linux | Descarga `shuttle-codec-x86_64.AppImage` (se compila best-effort), dale permisos (`chmod +x`) y ejecútalo. Si un release no trae AppImage, el binario `shuttle-codec` siempre se publica y funciona igual |
 
 > La primera vez, una compilación sin firmar puede ser bloqueada por SmartScreen
 > («Windows protegió tu PC» → *Más información* → *Ejecutar de todas formas*) o

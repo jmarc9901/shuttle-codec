@@ -35,7 +35,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-cov ruff mypy types-PyQt5
+          # PyQt5 ships its own .pyi stubs since 5.15.7, so no types-* package is
+          # needed (types-PyQt5 no longer exists on PyPI).
+          pip install pytest pytest-cov ruff mypy
 
       - name: Lint (ruff, including the security rules)
         run: ruff check .
@@ -70,7 +72,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-cov ruff mypy types-PyQt5
+          pip install pytest pytest-cov
 
       - name: Test with pytest
         # Media integration tests skip themselves when FFmpeg is unavailable, so

@@ -49,8 +49,8 @@ Not shipped. They only need to satisfy their own licenses in CI:
 | ruff | MIT |
 | mypy | MIT |
 | Pillow | MIT-CMU (used by PyInstaller to convert the icon) |
-| types-PyQt5 | Apache-2.0 |
 | pip-audit | Apache-2.0 |
+| build, twine | MIT / Apache-2.0 |
 | Inno Setup | Inno Setup License (free for commercial use) |
 
 ## Assets

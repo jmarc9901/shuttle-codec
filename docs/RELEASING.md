@@ -38,7 +38,7 @@ and publishes to GitHub Releases:
 | `shuttle-codec-<version>-setup.exe` | Inno Setup (`installer/shuttle-codec.iss`) |
 | `shuttle-codec-macos.zip` | zip of the macOS binary |
 | `shuttle-codec` (Linux) | PyInstaller |
-| `shuttle-codec-x86_64.AppImage` | appimagetool (best effort, `continue-on-error`) |
+| `shuttle-codec-x86_64.AppImage` | appimagetool, best effort (`continue-on-error`): the step logs a warning if it produced no file and the plain Linux binary stays the supported fallback |
 | `SHA256SUMS.txt` | checksum step, uploaded next to the binaries |
 | `pip-freeze.txt` | resolved dependency manifest recorded during the build |
 | Build provenance | `actions/attest-build-provenance` (SLSA), attached to each binary |
