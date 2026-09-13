@@ -32,7 +32,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest ruff mypy types-PyQt5
+          pip install pytest pytest-cov ruff mypy types-PyQt5
 
       - name: Lint with ruff
         run: ruff check .
@@ -42,5 +42,39 @@ jobs:
         run: mypy src/
 
       - name: Test with pytest
+        run: python -m pytest tests/ -v --tb=short
+
+      # Coverage runs once, on a single matrix cell, to keep CI fast.
+      - name: Coverage gate
+        if: runner.os == 'Linux' && matrix.python-version == '3.12'
+        run: python -m pytest tests/ -q --cov=src --cov-report=term-missing
+
+  build:
+    # Guards the PyInstaller path: packaging breaks are only visible here.
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install build dependencies
         run: |
-          python -m pytest tests/ -v --tb=short
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller pillow
+
+      - name: Download FFmpeg
+        run: python download_ffmpeg.py
+
+      - name: Build the executable
+        run: python build.py
+
+      - name: Smoke test the executable
+        shell: pwsh
+        run: |
+          if (-not (Test-Path dist/shuttle-codec.exe)) { throw "dist/shuttle-codec.exe was not produced" }
+          Get-Item dist/shuttle-codec.exe | Select-Object Name, Length

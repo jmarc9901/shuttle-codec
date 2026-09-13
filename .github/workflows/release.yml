@@ -5,12 +5,22 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
+
+    # Empty unless the signing secrets exist; job-level env is what makes the
+    # `env.X != ''` guards in the steps below work.
+    env:
+      WIN_CERT_PFX: ${{ secrets.WIN_CERT_PFX }}
+      WIN_CERT_PASSWORD: ${{ secrets.WIN_CERT_PASSWORD }}
 
     steps:
       - uses: actions/checkout@v4
@@ -20,14 +30,27 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Read the app version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(python -c "import re,pathlib; print(re.search(r'__version__ = \"([^\"]+)\"', pathlib.Path('src/__init__.py').read_text()).group(1))")
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pyinstaller
+          pip install pyinstaller pillow
 
+      # Optional integrity pinning: set the repository variables
+      # FFMPEG_BUILD_TAG and FFMPEG_ARCHIVE_SHA256 to make the build
+      # reproducible and tamper-evident.
       - name: Download FFmpeg (Windows)
         if: runner.os == 'Windows'
+        env:
+          FFMPEG_BUILD_TAG: ${{ vars.FFMPEG_BUILD_TAG }}
+          FFMPEG_ARCHIVE_SHA256: ${{ vars.FFMPEG_ARCHIVE_SHA256 }}
         run: python download_ffmpeg.py
 
       - name: Install FFmpeg (macOS)
@@ -40,6 +63,64 @@ jobs:
 
       - name: Build with PyInstaller
         run: python build.py
+
+      # Only runs once WIN_CERT_PFX (base64 of the .pfx) and
+      # WIN_CERT_PASSWORD are configured as repository secrets.
+      - name: Sign the Windows executable
+        if: runner.os == 'Windows' && env.WIN_CERT_PFX != ''
+        shell: pwsh
+        run: |
+          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\cert.pfx", [Convert]::FromBase64String($env:WIN_CERT_PFX))
+          signtool sign /f "$env:RUNNER_TEMP\cert.pfx" /p "$env:WIN_CERT_PASSWORD" `
+            /fd sha256 /tr http://timestamp.digicert.com /td sha256 dist\shuttle-codec.exe
+
+      - name: Build the Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer\shuttle-codec.iss /DMyAppVersion=${{ steps.version.outputs.value }}
+
+      - name: Package a macOS zip
+        if: runner.os == 'macOS'
+        run: |
+          cd dist
+          zip -j shuttle-codec-macos.zip shuttle-codec
+          cd ..
+
+      - name: Package an AppImage (Linux)
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        run: |
+          mkdir -p AppDir/usr/bin AppDir/usr/share/icons/hicolor/256x256/apps
+          cp dist/shuttle-codec AppDir/usr/bin/
+          cp logo.png AppDir/usr/share/icons/hicolor/256x256/apps/shuttle-codec.png
+          cat > AppDir/shuttle-codec.desktop <<'EOF'
+          [Desktop Entry]
+          Type=Application
+          Name=Shuttle Codec
+          Comment=Convert videos and audio with FFmpeg
+          Exec=shuttle-codec
+          Icon=shuttle-codec
+          Categories=AudioVideo;Video;
+          Terminal=false
+          EOF
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
+          chmod +x appimagetool
+          ./appimagetool --appimage-extract-and-run AppDir dist/shuttle-codec-x86_64.AppImage
+
+      - name: Generate SHA-256 checksums
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib, pathlib
+          lines = []
+          for path in sorted(pathlib.Path("dist").iterdir()):
+              if path.is_file():
+                  lines.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}")
+          pathlib.Path("dist/SHA256SUMS.txt").write_text("\n".join(lines) + "\n")
+          print("\n".join(lines))
+          PY
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -68,7 +149,12 @@ jobs:
         with:
           files: |
             shuttle-codec-Windows/shuttle-codec.exe
+            shuttle-codec-Windows/shuttle-codec-*-setup.exe
+            shuttle-codec-Windows/SHA256SUMS.txt
+            shuttle-codec-macOS/shuttle-codec-macos.zip
             shuttle-codec-macOS/shuttle-codec
             shuttle-codec-Linux/shuttle-codec
+            shuttle-codec-Linux/shuttle-codec-x86_64.AppImage
+            shuttle-codec-Linux/SHA256SUMS.txt
           fail_on_unmatched_files: false
           generate_release_notes: true

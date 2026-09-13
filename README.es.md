@@ -31,7 +31,7 @@
   <a href="README.md">🇬🇧 English</a>
 </p>
 
-> Convierte cualquier archivo de video con solo arrastrar y soltar. Soporta lote, aceleracion por hardware NVENC, recorte de video, conversion a GIF y modo experto. Tema oscuro estilo Catppuccin Mocha. Interfaz responsive adaptable a cualquier tamano de pantalla.
+> Convierte cualquier archivo de video, audio o imagen con solo arrastrar y soltar. Soporta lote, aceleracion por hardware NVENC/AMF/QSV (con fallback automatico a CPU), recorte de video, conversion a GIF, conversion de imagenes y extraccion de fotogramas, compresion a tamano objetivo, extraccion de audio y modo experto. Tema oscuro estilo Catppuccin Mocha. Interfaz adaptable a cualquier tamano de pantalla.
 
 ---
 
@@ -57,17 +57,24 @@
 ### Potentes
 - **Conversion de video**: MP4 (H.264/H.265), MKV, AVI, MOV, WebM, **GIF**
 - **Conversion de audio**: MP3, AAC, WAV, FLAC, OGG, M4A, WMA (archivos solo de audio)
-- **Procesamiento por lotes**: Convierte multiples archivos con la misma configuracion
+- **Extraer audio**: saca la pista de audio de cualquier video (MP3, AAC, FLAC, …)
+- **Conversion de imagenes**: PNG, JPG, WebP, BMP, TIFF con calidad y reescalado Lanczos
+- **Exportar fotograma**: guarda un fotograma del video como imagen en cualquier instante
+- **Tamano objetivo**: «comprime esto a 25 MB» — el bitrate se calcula solo
+- **Procesamiento por lotes**: Convierte multiples archivos con la misma configuracion; la cola sobrevive al reinicio
 - **Conversion a GIF**: Genera GIFs optimizados con palette optimizada (palettegen + paletteuse)
 - **Recorte de video**: Selecciona inicio y fin para recortar segmentos especificos (duracion en tiempo real)
-- **Aceleracion por hardware**: Detecta automaticamente NVENC (NVIDIA), AMF (AMD) o QSV (Intel)
+- **Aceleracion por hardware**: Detecta automaticamente NVENC (NVIDIA), AMF (AMD) o QSV (Intel), y **reintenta en la CPU automaticamente** si el encoder de la GPU falla en ejecucion
+- **Apagar al terminar**: lotes desatendidos, con cuenta atras de 60 s cancelable
 - **Control fino**: CRF, preset de codificacion, resolucion, FPS, codec de audio y mas
 
 ### Informativas
 - **ETA y velocidad**: Tiempo restante estimado y velocidad durante la conversion
 - **Info del archivo**: Codecs, resolucion, bitrate, duracion al cargar
-- **Persistencia**: Recuerda tamano/posicion de ventana, idioma y ultimas configuraciones
-- **Log detallado**: Registro completo de todas las operaciones
+- **Estimacion de tamano**: pronostico `≈ MB` que sigue tus ajustes
+- **Persistencia**: Recuerda tamano/posicion de ventana, idioma, ultimas configuraciones y la cola de lote
+- **Log detallado**: Registro completo de todas las operaciones, incluido el comando exacto de FFmpeg
+- **Reporte de errores en un clic**: el boton 🐞 abre una incidencia en GitHub ya rellena con el diagnostico
 
 ---
 
@@ -88,8 +95,11 @@
 
 ### Opcion 1: Descargar (Recomendado)
 1. Ve a la [ultima version](https://github.com/jmarc9901/shuttle-codec/releases/latest)
-2. Descarga `shuttle-codec.exe`
+2. Descarga el instalador (`shuttle-codec-<version>-setup.exe`) o el
+   `shuttle-codec.exe` portable
 3. Ejecutalo — FFmpeg ya viene incluido
+
+Cada release publica `SHA256SUMS.txt` para que puedas verificar la descarga.
 
 ### Opcion 2: Desde codigo fuente
 
@@ -118,39 +128,73 @@ python build.py
 
 El ejecutable estara en `dist/shuttle-codec.exe`.
 
+Tambien puedes generar un instalador de Windows con
+[Inno Setup](https://jrsoftware.org/isinfo.php):
+
+```bash
+iscc installer/shuttle-codec.iss /DMyAppVersion=1.3.0
+```
+
 ---
 
-## Novedades de la v1.2.0
+## Documentacion
 
-### 🐛 Correccion
-- **WebM arreglado**: WebM solo acepta Opus/Vorbis, asi que el audio ahora
-  se recodifica a Opus en vez de generar un stream AAC imposible de escribir
-  (`Could not write header`). Tampoco se hace stream-copy hacia WebM.
-- **Aceleracion HEVC arreglada**: MP4 (H.265) ahora usa `hevc_nvenc` /
-  `hevc_amf` / `hevc_qsv` en lugar de caer silenciosamente al encoder H.264.
-- **VP9 a calidad constante**: se agrega el obligatorio `-b:v 0` y se reemplaza
-  el `-preset` no soportado por `-deadline`/`-cpu-used` de libvpx.
-- **Filtro GIF limpio**: se elimina el `scale=-1:-1` invalido al mantener la
-  resolucion original.
-- **HEVC en MP4/MOV** se etiqueta `hvc1` para compatibilidad con QuickTime/Apple.
+| Documento | Contenido |
+|-----------|-----------|
+| [Guia de usuario](docs/USER_GUIDE.es.md) ([en](docs/USER_GUIDE.md)) | Todas las funciones, paso a paso |
+| [Problemas y FAQ](docs/TROUBLESHOOTING.es.md) ([en](docs/TROUBLESHOOTING.md)) | Problemas habituales, formatos, privacidad |
+| [Releasing](docs/RELEASING.md) | Proceso de release, firma de codigo, pin de FFmpeg |
+| [CHANGELOG](CHANGELOG.md) | Historial de versiones |
 
-### 🔒 Seguridad
-- Extraccion segura de tar/zip al descargar FFmpeg (mitiga path traversal,
-  CVE-2007-4559) y `filter="data"` en Python 3.12+.
-- SSL verification, validacion de rutas con `os.path.realpath()` y validacion
-  de archivos multimedia antes de procesar.
+---
 
-### 🎯 Calidad
-- `ruff` y `mypy` pasan limpios en todo el arbol (el CI verifica ambos).
-- 110 tests unitarios, con tests de regresion para cada arreglo anterior y
-  un smoke test headless de la ventana principal.
-- Tipado moderno PEP 604 (`str | None`) sobre base Python 3.10+.
-- Renombrado el atributo `thread` del worker de lote (ocultaba `QObject.thread()`).
+## Novedades de la v1.3.0
 
-### 🌐 Internacionalizacion y UX
-- Interfaz Español/Ingles con cambio de idioma instantaneo y persistente.
-- El indicador de estado de FFmpeg y la etiqueta de aceleracion por hardware
-  se vuelven a renderizar correctamente al cambiar de idioma.
+### ✨ Añadido
+- **Conversion de imagenes**: salida PNG, JPG, WebP, BMP y TIFF con deslizador de
+  calidad y reescalado Lanczos — el filtro de archivos ya no promete imagenes que
+  la aplicacion no podia manejar.
+- **Exportar fotograma**: guarda un fotograma del video como imagen en cualquier
+  instante (busca antes de `-i`, asi que es instantaneo incluso en archivos largos).
+- **Tamano objetivo**: pide un tamano en MB y el bitrate se calcula solo (control
+  de tasa en una pasada); la estimacion de tamano se actualiza en vivo.
+- **Extraer solo el audio**: conserva unicamente la pista de audio del video, en
+  cualquier formato soportado.
+- **Fallback automatico a CPU**: si el encoder de la GPU falla en ejecucion
+  (driver antiguo, GPU ocupada, limite de sesiones) el trabajo se reintenta en
+  software en lugar de fallar.
+- **Cola de lote persistente** y **apagado al terminar**, con cuenta atras de 60
+  segundos cancelable.
+- **Reporte de errores en un clic**: incidencia de GitHub rellenada con version,
+  sistema, versiones de Python/Qt/FFmpeg y el registro (nunca se envia solo).
+- **Estimacion del tamano de salida** (`📏 ≈ MB`) en el panel de informacion.
+
+### 🐛 Corregido
+- **Diaologo ilegible al terminar**: el mensaje tras una conversion mostraba
+  texto claro sobre fondo claro. Los dialogos, tooltips y menus siguen ahora el
+  tema oscuro tanto por stylesheet como por la paleta de la aplicacion.
+- **La calidad AMF se ignoraba**: `h264_amf`/`hevc_amf` aplican ya el CRF via
+  `-rc cqp -qp_i/-qp_p` en lugar de solo `-quality balanced`.
+- El comando de fallback se reescribe en su sitio, sin dejar opciones despues de
+  la ruta de salida (donde FFmpeg avisa y las ignora).
+
+### 🚀 Distribucion y calidad
+- **Instalador de Windows** (Inno Setup, `installer/shuttle-codec.iss`), **zip de
+  macOS** y **AppImage de Linux** (best effort) en el workflow de release.
+- **Checksums SHA-256** publicados en cada release, con ganchos opcionales de
+  firma y notarizacion (ver [RELEASING.md](docs/RELEASING.md)).
+- **Pin de FFmpeg**: `FFMPEG_BUILD_TAG` + `FFMPEG_ARCHIVE_SHA256` hacen los
+  binarios reproducibles y verificables; el script se niega a extraer un archivo
+  que no coincide.
+- **Version con una sola fuente** (`src/__init__.py`), escalado HiDPI y un job de
+  CI que compila el ejecutable en Windows.
+- **232 tests unitarios** con minimo de cobertura exigido (80%, hoy ~82%);
+  `ruff` limpio en todo el arbol y `mypy` limpio en `src/`.
+
+### 📚 Documentacion
+- Guia de usuario, problemas/FAQ y documentacion de release en ingles y español.
+
+> Versiones anteriores: consulta [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -159,9 +203,10 @@ El ejecutable estara en `dist/shuttle-codec.exe`.
 ```bash
 pip install -e ".[dev]"
 
-python -m pytest tests/ -v     # 110 tests unitarios
-ruff check .                   # lint
-mypy src/                      # chequeo de tipos
+python -m pytest tests/ -v                          # 232 tests unitarios
+python -m pytest tests/ --cov=src --cov-report=term # cobertura (minimo: 80%)
+ruff check .                                        # lint
+mypy src/                                           # chequeo de tipos
 ```
 
 ---
@@ -180,17 +225,21 @@ shuttle-codec/
 │   ├── presets.py            # Presets por caso de uso + mapa de resoluciones
 │   ├── theme.py              # Paleta y stylesheet Catppuccin Mocha
 │   ├── utils.py              # Icono y helpers de tiempo/tamano
+│   ├── diagnostics.py        # Texto de diagnostico y URL de incidencia
 │   └── i18n.py               # Traducciones ES/EN
 ├── tests/
 │   ├── test_app_smoke.py        # UI headless (se omite sin Qt)
-│   ├── test_ffmpeg_handler.py   # comandos, formatos, hardware, recorte, audio
+│   ├── test_ffmpeg_handler.py   # comandos, formatos, hardware, recorte, audio, imagenes
 │   ├── test_ffmpeg_downloader.py
-│   ├── test_download_ffmpeg.py  # seguridad de extraccion de archivos
-│   ├── test_workers.py          # gestor de lote
+│   ├── test_download_ffmpeg.py  # seguridad e integridad de la extraccion
+│   ├── test_diagnostics.py      # composicion del informe
+│   ├── test_workers.py          # gestor de lote y fallback a CPU
 │   ├── test_presets.py
 │   ├── test_theme.py
 │   ├── test_utils.py
 │   └── test_i18n.py
+├── installer/               # Script de Inno Setup (instalador Windows)
+├── docs/                    # Guia de usuario, FAQ, notas de release, demo.gif
 ├── resources/bin/           # Binarios FFmpeg embebidos
 ├── download_ffmpeg.py       # Descarga FFmpeg desde GitHub
 ├── build.py                 # Build con PyInstaller

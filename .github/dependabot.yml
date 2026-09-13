@@ -1,0 +1,21 @@
+version: 2
+# Keeps the runtime dependency (PyQt5) and the CI actions patched: the app has
+# no other third-party libraries, so this is a small but complete surface.
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    groups:
+      python-dependencies:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns: ["*"]
