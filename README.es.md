@@ -126,7 +126,7 @@ python -m src.main
 ```bash
 python download_ffmpeg.py
 pip install -e ".[build]"   # pyinstaller + pillow
-python build.py
+python build_exe.py
 ```
 
 El ejecutable estara en `dist/shuttle-codec.exe`.
@@ -267,7 +267,7 @@ shuttle-codec/
 ├── docs/                    # Guia de usuario, FAQ, arquitectura, notas de release, demo.gif
 ├── resources/bin/           # Binarios FFmpeg embebidos
 ├── download_ffmpeg.py       # Descarga FFmpeg desde GitHub
-├── build.py                 # Build con PyInstaller
+├── build_exe.py             # Build con PyInstaller
 ├── pyproject.toml
 └── requirements.txt
 ```

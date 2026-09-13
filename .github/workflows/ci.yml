@@ -169,7 +169,7 @@ jobs:
         run: python download_ffmpeg.py
 
       - name: Build the executable
-        run: python build.py
+        run: python build_exe.py
 
       - name: Smoke test the executable
         shell: pwsh

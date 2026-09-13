@@ -11,7 +11,7 @@ carry their own licenses. If you redistribute a build, read this page first.
 
 | Component | Version | License | Where |
 |-----------|---------|---------|-------|
-| [FFmpeg](https://ffmpeg.org/) | latest `-gpl` build (or the pinned `FFMPEG_BUILD_TAG`) | **GPL v3** (the GPL variants include libx264/libx265) | `resources/bin/`, embedded by `build.py` into the executable |
+| [FFmpeg](https://ffmpeg.org/) | latest `-gpl` build (or the pinned `FFMPEG_BUILD_TAG`) | **GPL v3** (the GPL variants include libx264/libx265) | `resources/bin/`, embedded by `build_exe.py` into the executable |
 | [PyQt5](https://riverbankcomputing.com/software/pyqt/) / [Qt 5](https://www.qt.io/) | >= 5.15 | **GPL v3** (or a commercial Riverbank license) | Python runtime dependency, frozen by PyInstaller |
 | [Python](https://www.python.org/) | 3.10-3.13 | PSF-2.0 | Interpreter embedded by PyInstaller |
 | [PyInstaller](https://pyinstaller.org/) | >= 6.0 | GPL-2.0 **with the bootloader exception** (frozen applications may be licensed freely) | Build tool |

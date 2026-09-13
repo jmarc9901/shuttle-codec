@@ -77,7 +77,7 @@ jobs:
         run: sudo apt update && sudo apt install -y ffmpeg
 
       - name: Build with PyInstaller
-        run: python build.py
+        run: python build_exe.py
 
       # Only runs once WIN_CERT_PFX (base64 of the .pfx) and
       # WIN_CERT_PASSWORD are configured as repository secrets.

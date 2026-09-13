@@ -1,6 +1,6 @@
 ; Inno Setup script for Shuttle Codec (Windows installer).
 ;
-; Build it after `python build.py` (which produces dist\shuttle-codec.exe):
+; Build it after `python build_exe.py` (which produces dist\shuttle-codec.exe):
 ;
 ;   iscc installer\shuttle-codec.iss /DMyAppVersion=1.3.0
 ;

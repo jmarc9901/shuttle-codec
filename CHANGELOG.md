@@ -7,7 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+- **`build.py` is now `build_exe.py`**: a top-level `build` module shadows the
+  PyPI package of the same name, so on a checkout `python -m build` imported the
+  PyInstaller script instead of running the standard packaging frontend. The
+  references in the READMEs, the installer, the docs and both workflows moved
+  with it.
+
 ### Fixed
+- **The headless UI tests crashed the interpreter on Windows**: one test did not
+  force FFmpeg to look available, so the app took its "FFmpeg missing" path and
+  built a *real* `QMessageBox` — a native modal dialog in an offscreen
+  `QApplication` aborts with an access violation. The smoke tests now stub every
+  native dialog per test and no longer depend on FFmpeg being installed.
 - **CI failed on every run**: the workflows installed `types-PyQt5`, a stub
   package that no longer exists on PyPI (`No matching distribution found`), so
   dependency installation died in all 12 matrix cells before any test ran. PyQt5

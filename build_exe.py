@@ -2,6 +2,10 @@
 Build script for Shuttle Codec.
 Embeds FFmpeg binaries into the executable.
 Supports Windows, macOS, and Linux.
+
+Deliberately *not* named `build.py`: a top-level `build` module shadows the
+PyPI one, so on a checkout `python -m build` would import this file instead of
+running the standard packaging frontend.
 """
 import os
 import platform

@@ -81,6 +81,31 @@ class TestMainWindowSmoke(unittest.TestCase):
         self.window._set_simple_mode(True)
         self.window._clear_batch()
         self.window.retranslate_ui()
+        self._block_native_dialogs()
+
+    def _block_native_dialogs(self) -> None:
+        """
+        Replace every native dialog with a harmless stub for this test.
+
+        An offscreen QApplication cannot host a real modal dialog: on Windows CI
+        it aborts the interpreter with an access violation, and anywhere else it
+        would wait for a click nobody can give. Tests that assert on a dialog's
+        arguments patch it again inside their own `with` block, which takes
+        precedence while it is active.
+        """
+        stubs: list[tuple[type, str, object]] = [
+            (QFileDialog, "getOpenFileName", ("", "")),
+            (QFileDialog, "getSaveFileName", ("", "")),
+            (QFileDialog, "getOpenFileNames", ([], "")),
+            (QMessageBox, "information", QMessageBox.Ok),
+            (QMessageBox, "warning", QMessageBox.Ok),
+            (QMessageBox, "critical", QMessageBox.Ok),
+            (QMessageBox, "question", QMessageBox.No),
+        ]
+        for owner, name, value in stubs:
+            patcher = patch.object(owner, name, return_value=value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     def test_window_and_presets_construct(self) -> None:
         self.assertEqual(self.window.preset_combo.count(), 8)
@@ -376,7 +401,10 @@ class TestMainWindowSmoke(unittest.TestCase):
         self.window.hw_check.setChecked(False)
         out = os.path.join(os.path.dirname(video), "out.mp4")
 
-        with patch.object(QFileDialog, "getSaveFileName", return_value=(out, "")), \
+        # FFmpeg availability is irrelevant to the command that gets built, and
+        # without this the test would take the "FFmpeg missing" branch.
+        with patch.object(self.window.ffmpeg, "check_ffmpeg", return_value=True), \
+                patch.object(QFileDialog, "getSaveFileName", return_value=(out, "")), \
                 patch("src.app.ConversionThread") as thread_cls:
             self.window.start_conversion()
 
@@ -395,7 +423,8 @@ class TestMainWindowSmoke(unittest.TestCase):
         self.window.hw_check.setChecked(True)
         out = os.path.join(os.path.dirname(video), "out.mp4")
 
-        with patch.object(QFileDialog, "getSaveFileName", return_value=(out, "")), \
+        with patch.object(self.window.ffmpeg, "check_ffmpeg", return_value=True), \
+                patch.object(QFileDialog, "getSaveFileName", return_value=(out, "")), \
                 patch.object(FFmpegHandler, "_get_hw_encoder", return_value="h264_nvenc"), \
                 patch("src.app.ConversionThread") as thread_cls:
             self.window.start_conversion()
@@ -416,7 +445,8 @@ class TestMainWindowSmoke(unittest.TestCase):
     def test_start_conversion_aborts_when_the_save_dialog_is_cancelled(self) -> None:
         video = self._temp_file(".mp4")
         self.window.load_file(video)
-        with patch.object(QFileDialog, "getSaveFileName", return_value=("", "")), \
+        with patch.object(self.window.ffmpeg, "check_ffmpeg", return_value=True), \
+                patch.object(QFileDialog, "getSaveFileName", return_value=("", "")), \
                 patch("src.app.ConversionThread") as thread_cls:
             self.window.start_conversion()
         self.assertFalse(thread_cls.called)
