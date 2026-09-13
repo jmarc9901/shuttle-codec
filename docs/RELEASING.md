@@ -25,7 +25,7 @@ credentials from the maintainer is marked **manual**.
 4. Commit, tag and push:
 
    ```bash
-   git tag v1.3.0
+   git tag v1.3.1
    git push origin main --tags
    ```
 

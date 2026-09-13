@@ -4,4 +4,4 @@
 `pyproject.toml` reads it dynamically and `src.app.VERSION` imports it.
 """
 
-__version__ = "1.3.0"
+__version__ = "1.3.1"

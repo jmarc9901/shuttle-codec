@@ -135,7 +135,7 @@ Tambien puedes generar un instalador de Windows con
 [Inno Setup](https://jrsoftware.org/isinfo.php):
 
 ```bash
-iscc installer/shuttle-codec.iss /DMyAppVersion=1.3.0
+iscc installer/shuttle-codec.iss /DMyAppVersion=1.3.1
 ```
 
 ---
@@ -153,7 +153,12 @@ iscc installer/shuttle-codec.iss /DMyAppVersion=1.3.0
 
 ---
 
-## Novedades de la v1.3.0
+## Novedades de la v1.3.1
+
+> La v1.3.1 es un parche de empaquetado: publica la **AppImage** de Linux —las
+> compilaciones anteriores no la generaban— y arregla el pipeline de release. La
+> aplicacion no cambia respecto a la v1.3.0 y la lista de abajo es el conjunto
+> actual completo de funciones.
 
 ### ✨ Añadido
 - **Conversion de imagenes**: salida PNG, JPG, WebP, BMP y TIFF con deslizador de

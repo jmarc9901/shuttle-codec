@@ -123,7 +123,7 @@ The executable will be at `dist/shuttle-codec.exe`.
 A Windows installer can be built with [Inno Setup](https://jrsoftware.org/isinfo.php):
 
 ```bash
-iscc installer/shuttle-codec.iss /DMyAppVersion=1.3.0
+iscc installer/shuttle-codec.iss /DMyAppVersion=1.3.1
 ```
 
 ---
@@ -154,7 +154,11 @@ iscc installer/shuttle-codec.iss /DMyAppVersion=1.3.0
 
 ---
 
-## What's new in v1.3.0
+## What's new in v1.3.1
+
+> v1.3.1 is a packaging patch: it ships the Linux **AppImage** — earlier builds
+> failed to produce one — and fixes the release pipeline. The application is
+> unchanged from v1.3.0, and the list below is the current, complete feature set.
 
 ### ✨ Added
 - **Image conversion**: PNG, JPG, WebP, BMP and TIFF output with a quality

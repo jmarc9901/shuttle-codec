@@ -64,6 +64,13 @@ class TestVersionConsistency(unittest.TestCase):
 
         self.assertEqual(VERSION, __version__)
 
+    def test_the_installer_fallback_matches_the_version(self) -> None:
+        """`iscc` without `/DMyAppVersion` must not ship a mislabelled installer."""
+        match = re.search(r'#define MyAppVersion "([^"]+)"', read("installer", "shuttle-codec.iss"))
+        self.assertIsNotNone(match, "the .iss has no MyAppVersion fallback")
+        assert match is not None
+        self.assertEqual(match.group(1), __version__)
+
 
 class TestTranslations(unittest.TestCase):
     def test_both_languages_define_the_same_keys(self) -> None:

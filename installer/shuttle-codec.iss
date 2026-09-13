@@ -2,15 +2,17 @@
 ;
 ; Build it after `python build_exe.py` (which produces dist\shuttle-codec.exe):
 ;
-;   iscc installer\shuttle-codec.iss /DMyAppVersion=1.3.0
+;   iscc installer\shuttle-codec.iss /DMyAppVersion=1.3.1
 ;
 ; Optional code signing: pass a SignTool configured in Inno Setup, e.g.
-;   iscc installer\shuttle-codec.iss /DMyAppVersion=1.3.0 /Ssigntool="signtool sign /f cert.pfx /p pass $f"
+;   iscc installer\shuttle-codec.iss /DMyAppVersion=1.3.1 /Ssigntool="signtool sign /f cert.pfx /p pass $f"
 ; See docs/RELEASING.md for the full release + signing checklist.
 
 #define MyAppName "Shuttle Codec"
+; Fallback only: the release workflow always passes /DMyAppVersion. It must match
+; src/__init__.py, and tests/test_project_consistency.py enforces that.
 #ifndef MyAppVersion
-  #define MyAppVersion "0.0.0"
+  #define MyAppVersion "1.3.1"
 #endif
 #define MyAppPublisher "JMarc"
 #define MyAppURL "https://github.com/jmarc9901/shuttle-codec"
