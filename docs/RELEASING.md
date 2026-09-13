@@ -11,13 +11,16 @@ credentials from the maintainer is marked **manual**.
 1. Update `__version__` in `src/__init__.py` (the single source of truth:
    `pyproject.toml` reads it, so the package metadata follows automatically).
 2. Add the matching section to `CHANGELOG.md`.
-3. Run the local checks:
+3. Run the local checks (the same ones the hooks and CI run):
 
    ```bash
-   python -m pytest tests/ -q --cov=src
-   ruff check .
-   mypy src/
+   python -m pytest tests/ -q --cov=src   # includes real FFmpeg conversions
+   ruff check .                          # lint + security rules
+   mypy src/                             # strict (see pyproject.toml)
    ```
+
+   `python download_ffmpeg.py` first if you want the integration tests to run
+   instead of skipping themselves.
 
 4. Commit, tag and push:
 
@@ -37,13 +40,34 @@ and publishes to GitHub Releases:
 | `shuttle-codec` (Linux) | PyInstaller |
 | `shuttle-codec-x86_64.AppImage` | appimagetool (best effort, `continue-on-error`) |
 | `SHA256SUMS.txt` | checksum step, uploaded next to the binaries |
+| `pip-freeze.txt` | resolved dependency manifest recorded during the build |
+| Build provenance | `actions/attest-build-provenance` (SLSA), attached to each binary |
 
 ## 2. Verify an artifact
 
 ```bash
-sha256sum -c SHA256SUMS.txt          # Linux / macOS(sha256sum -c)
-certutil -hashfile shuttle-codec.exe SHA256   # Windows
+sha256sum -c SHA256SUMS.txt                    # Linux / macOS
+certutil -hashfile shuttle-codec.exe SHA256    # Windows
 ```
+
+The checksums can themselves be tampered with, which is what the provenance
+attestation is for: it is signed by the workflow identity and can be verified
+independently of the release page.
+
+```bash
+gh attestation verify shuttle-codec.exe --repo jmarc9901/shuttle-codec
+```
+
+## 2b. Before you publish: license obligations (**manual, required**)
+
+The binaries bundle GPL v3 software (the `-gpl` FFmpeg build and PyQt5/Qt). The
+project's own code stays Apache-2.0, but publishing a *binary* means complying
+with the GPL for the combined work: ship the license texts, keep the notices and
+make the corresponding source identifiable.
+
+See [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) for the exact list and
+what each artifact must include. Pinning `FFMPEG_BUILD_TAG` also makes the
+FFmpeg source reproducible and therefore identifiable.
 
 ## 3. Pin the bundled FFmpeg (**manual, recommended**)
 
@@ -112,9 +136,23 @@ mechanism.
 
 ## 5. After publishing
 
-- Check the release page: all artifacts present, checksums uploaded.
+- Check the release page: all artifacts present, checksums uploaded and the
+  attestation visible (`gh attestation verify <file> --repo jmarc9901/shuttle-codec`).
 - Install on a clean Windows VM and run one conversion of each kind (video,
   audio extraction, image, frame export) to verify the packaged build, not just
   the source tree.
+- Check the [Security workflow](../.github/workflows/security.yml) run and the
+  CodeQL alerts: both are scheduled, so a quiet week is not the same as a green
+  build.
 - Update the README screenshots if the UI changed (`create_demo.py` regenerates
   `docs/demo.gif`).
+
+## 6. What runs automatically, and when
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `ci.yml` | push/PR to `main` | lint, strict types, 12-cell test matrix, coverage gate, Windows packaging |
+| `codeql.yml` | push/PR + weekly | GitHub code scanning (security-and-quality queries) |
+| `security.yml` | weekly + dependency changes | `pip-audit` on the runtime dependencies |
+| `release.yml` | `v*` tag | builds, signs, attests and publishes the artifacts |
+| Dependabot | monthly | pip and GitHub Actions updates |

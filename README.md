@@ -25,6 +25,9 @@
   <a href="https://github.com/jmarc9901/shuttle-codec/blob/main/CONTRIBUTING.md">
     <img src="https://img.shields.io/badge/contributions-welcome-brightgreen" alt="Contributions">
   </a>
+  <a href="https://github.com/jmarc9901/shuttle-codec/actions/workflows/codeql.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/jmarc9901/shuttle-codec/codeql.yml?branch=main&label=CodeQL" alt="CodeQL">
+  </a>
 </p>
 
 <p align="center">
@@ -131,7 +134,9 @@ iscc installer/shuttle-codec.iss /DMyAppVersion=1.3.0
 |----------|----------|
 | [User guide](docs/USER_GUIDE.md) ([es](docs/USER_GUIDE.es.md)) | Every feature, step by step |
 | [Troubleshooting & FAQ](docs/TROUBLESHOOTING.md) ([es](docs/TROUBLESHOOTING.es.md)) | Common problems, supported formats, privacy |
+| [Architecture](docs/ARCHITECTURE.md) | Module map, threading model, invariants, how to extend |
 | [Releasing](docs/RELEASING.md) | Release process, code signing, FFmpeg pinning |
+| [Third-party notices](THIRD_PARTY_NOTICES.md) | Bundled FFmpeg/Qt licenses and what a release must ship |
 | [CHANGELOG](CHANGELOG.md) | Version history |
 
 ---
@@ -145,7 +150,7 @@ iscc installer/shuttle-codec.iss /DMyAppVersion=1.3.0
 | Video Engine | FFmpeg (bundled) |
 | Packaging | PyInstaller |
 | Theme | Catppuccin Mocha |
-| Testing | pytest + unittest.mock |
+| Testing | pytest, unittest.mock + real FFmpeg integration runs |
 
 ---
 
@@ -188,11 +193,20 @@ iscc installer/shuttle-codec.iss /DMyAppVersion=1.3.0
   extract a mismatching archive.
 - **Version single source of truth** (`src/__init__.py`), HiDPI scaling flags,
   and a CI job that builds the executable on Windows.
-- **232 unit tests** with an enforced coverage floor (80%, currently ~82%);
-  `ruff` clean on the whole tree and `mypy` clean on `src/`.
+- **262 tests** with an enforced coverage floor (80%, currently ~83%): `ruff`
+  clean on the whole tree (security rules included), `mypy --strict` clean on
+  `src/`, CodeQL scanning, a weekly `pip-audit` run and Dependabot updates.
+- **Real FFmpeg integration tests**: the suite runs a dozen actual conversions on
+  synthetic clips and skips them when no usable binary is present.
+- **Build provenance**: releases are attested with SLSA provenance, ship
+  `SHA256SUMS.txt` and a `pip-freeze.txt` manifest, and set `SOURCE_DATE_EPOCH`
+  so the same commit builds reproducibly.
+- **Accessibility**: every control exposes an accessible name, the log is
+  timestamped and state is never signalled by colour alone.
 
 ### 📚 Documentation
-- Full user guide, troubleshooting/FAQ and release docs in English and Spanish.
+- Full user guide, troubleshooting/FAQ, architecture and release docs in English
+  and Spanish, plus [third-party notice obligations](THIRD_PARTY_NOTICES.md).
 
 > Older releases: see [CHANGELOG.md](CHANGELOG.md).
 
@@ -203,11 +217,20 @@ iscc installer/shuttle-codec.iss /DMyAppVersion=1.3.0
 ```bash
 pip install -e ".[dev]"
 
-python -m pytest tests/ -v                          # 232 unit tests
+python -m pytest tests/ -v                          # 262 tests
 python -m pytest tests/ --cov=src --cov-report=term # coverage (floor: 80%)
-ruff check .                                        # lint
-mypy src/                                           # type check
+ruff check .                                        # lint (security rules included)
+mypy src/                                           # strict type check
 ```
+
+Install the hooks to run the same checks before every commit:
+
+```bash
+pip install pre-commit && pre-commit install
+```
+
+`tests/test_ffmpeg_integration.py` runs real conversions on synthetic clips and
+skips itself when FFmpeg is unavailable, so the suite stays green everywhere.
 
 ---
 
@@ -230,6 +253,8 @@ shuttle-codec/
 ├── tests/
 │   ├── test_app_smoke.py        # headless UI wiring (skipped without Qt)
 │   ├── test_ffmpeg_handler.py   # commands, formats, hardware, trim, audio, images
+│   ├── test_ffmpeg_integration.py # real FFmpeg runs (skipped without FFmpeg)
+│   ├── test_project_consistency.py # version, translations, docs links
 │   ├── test_ffmpeg_downloader.py
 │   ├── test_download_ffmpeg.py  # archive extraction safety & integrity
 │   ├── test_diagnostics.py      # report assembly
@@ -239,7 +264,7 @@ shuttle-codec/
 │   ├── test_utils.py
 │   └── test_i18n.py
 ├── installer/               # Inno Setup script (Windows installer)
-├── docs/                    # User guide, FAQ, release notes, demo.gif
+├── docs/                    # User guide, FAQ, architecture, release notes, demo.gif
 ├── resources/bin/           # Bundled FFmpeg binaries
 ├── download_ffmpeg.py       # FFmpeg downloader (with optional hash pinning)
 ├── build.py                 # PyInstaller builder

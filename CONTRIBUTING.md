@@ -32,21 +32,40 @@
 #### Estándares de código
 
 - **Python 3.10+** compatible
-- **Type hints** en todas las funciones y métodos
+- **Type hints** en todas las funciones y métodos: `mypy` corre en modo `strict`
 - Nombres de variables en inglés (snake_case)
-- Comentarios y docstrings en español (idioma del proyecto)
+- Comentarios y docstrings en inglés; textos de UI en `src/i18n.py` (ES y EN)
 - Sigue el estilo existente del código
+
+Antes de tocar nada, lee [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): explica el
+reparto de módulos, el modelo de hilos y los invariantes que no conviene romper.
 
 #### Antes de hacer commit
 
 ```bash
-# Verificar que los tests pasan
+# Verificar que los tests pasan (los de FFmpeg real se omiten si no hay binario)
 python -m pytest tests/ -v
 
-# Lint y tipado
+# Lint, tipado estricto y cobertura
 ruff check .
 mypy src/
+python -m pytest tests/ -q --cov=src --cov-report=term   # minimo 80%
 ```
+
+O instala los hooks y que se ejecuten solos:
+
+```bash
+pip install pre-commit && pre-commit install
+```
+
+#### Tests obligatorios para un cambio
+
+- Cualquier cambio en la construccion de comandos necesita su test en
+  `tests/test_ffmpeg_handler.py`.
+- Si anades un contenedor, anade su entrada en `COPY_SAFE_AUDIO_CODECS`: hay un
+test de consistencia que lo comprueba.
+- Si anades texto de UI, anade la clave en **los dos** idiomas: la paridad se
+  verifica en `tests/test_project_consistency.py`.
 
 ## Entorno de desarrollo
 

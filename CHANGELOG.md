@@ -1,5 +1,14 @@
 # Changelog
 
+All notable changes to this project are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## Unreleased
+
+_No changes yet._
+
 ## v1.3.0 (2026-09-12)
 
 ### Added
@@ -35,6 +44,24 @@
   release and inert-but-ready signing/notarization hooks.
 - **FFmpeg pinning**: `FFMPEG_BUILD_TAG` and `FFMPEG_ARCHIVE_SHA256` make the
   bundled binaries reproducible; a mismatching archive is never extracted.
+- **Real FFmpeg integration tests** (`tests/test_ffmpeg_integration.py`): a dozen
+  actual conversions on synthetic clips (H.264/H.265, WebM+Opus, GIF, trim,
+  target size, scaling, images, frame export, CPU fallback), skipped per encoder
+  when the local build lacks it. Mocked unit tests cannot catch a command FFmpeg
+  itself rejects.
+- **Repository consistency tests** (`tests/test_project_consistency.py`): the
+  version against the CHANGELOG and both READMEs, ES/EN key parity and `{}`
+  placeholder parity, preset labels, copy-safe audio coverage per container and
+  every relative markdown link.
+- **Accessibility**: `accessibleName`/`accessibleDescription` for every
+  interactive control (re-applied on language change), timestamped log lines, and
+  the invalid trim range stated in words instead of red text alone.
+- **`docs/ARCHITECTURE.md`** and **`THIRD_PARTY_NOTICES.md`**: the module map,
+  threading model and invariants, plus the GPL v3 obligations that come with the
+  bundled FFmpeg and PyQt5.
+- **Project standards**: `.pre-commit-config.yaml`, `CODEOWNERS`, CodeQL code
+  scanning, a weekly `pip-audit` audit, and a release pipeline with SLSA build
+  provenance, a `pip-freeze.txt` manifest and a reproducible `SOURCE_DATE_EPOCH`.
 
 ### Fixed
 - **Unreadable completion dialog**: the message box shown after a conversion
@@ -77,9 +104,13 @@
   downloads) are documented in `pyproject.toml`.
 - Dependabot keeps the pip dependencies and the GitHub Actions pinned and
   patched (`.github/dependabot.yml`).
+- `mypy` now runs `strict` (plus `warn_unreachable`); the platform branches use
+  a `PLATFORM` constant so the reachability check holds on every OS.
+- CI uses least-privilege permissions, cancels superseded runs, caches pip and
+  splits lint/type checking into its own job with a coverage artifact.
 
 ### Testing
-- **232 unit tests** (up from 110) and 82% line coverage, including regression
+- **262 tests** (up from 110) and 83% line coverage, including regression
   tests for the dialog styling, image/frame commands, target-size maths, size
   estimates, the CPU fallback, batch persistence, audio-copy safety and the
   diagnostics report. The headless UI tests now really isolate their
