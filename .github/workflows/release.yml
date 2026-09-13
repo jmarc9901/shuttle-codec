@@ -4,6 +4,10 @@ on:
   push:
     tags:
       - 'v*'
+  # Dry run: builds, signs and attests on all three platforms but never
+  # publishes a release (the `release` job only runs for a tag push). Use it to
+  # validate packaging changes without cutting a version.
+  workflow_dispatch:
 
 # Least privilege by default; each job widens it only where it must.
 permissions:
@@ -179,6 +183,8 @@ jobs:
 
   release:
     needs: build
+    # A manual dispatch is a dry run: nothing is published to the releases page.
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write

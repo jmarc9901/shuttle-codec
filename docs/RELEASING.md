@@ -43,6 +43,21 @@ and publishes to GitHub Releases:
 | `pip-freeze.txt` | resolved dependency manifest recorded during the build |
 | Build provenance | `actions/attest-build-provenance` (SLSA), attached to each binary |
 
+## 1b. Validate the pipeline without releasing (**recommended**)
+
+The release workflow can be triggered by hand. That run builds, signs, attests
+and uploads the artifacts of all three platforms but **skips the publish job**,
+so it is the safe way to check a packaging change (or that the best-effort
+AppImage is still produced):
+
+```bash
+gh workflow run release.yml
+gh run watch
+```
+
+Download the Linux artifact from the run and look for
+`shuttle-codec-x86_64.AppImage`.
+
 ## 2. Verify an artifact
 
 ```bash
