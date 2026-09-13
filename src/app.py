@@ -8,12 +8,23 @@ helpers in `utils.py`, and the FFmpeg logic in `ffmpeg_handler.py`.
 
 import contextlib
 import os
+import subprocess
 from typing import Any, cast
 
-from PyQt5.QtCore import QSettings, Qt, QTime, QTimer
-from PyQt5.QtGui import QCloseEvent, QColor, QDragEnterEvent, QDropEvent, QIcon, QKeySequence
+from PyQt5.QtCore import QT_VERSION_STR, QSettings, Qt, QTime, QTimer, QUrl
+from PyQt5.QtGui import (
+    QCloseEvent,
+    QColor,
+    QDesktopServices,
+    QDragEnterEvent,
+    QDropEvent,
+    QIcon,
+    QKeySequence,
+    QPalette,
+)
 from PyQt5.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QCheckBox,
     QComboBox,
     QFileDialog,
@@ -31,6 +42,7 @@ from PyQt5.QtWidgets import (
     QScrollArea,
     QShortcut,
     QSlider,
+    QSpinBox,
     QSplitter,
     QStatusBar,
     QTextEdit,
@@ -39,11 +51,16 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from . import __version__
+from .diagnostics import build_diagnostics, build_issue_url
 from .ffmpeg_handler import FFmpegHandler
 from .i18n import get_available_languages, get_language, set_language, tr
 from .presets import RESOLUTION_MAP, get_preset, get_preset_ids
 from .theme import (
+    ACCENT,
+    BASE,
     BLUE,
+    CRUST,
     DANGER,
     MAUVE,
     OVERLAY0,
@@ -51,14 +68,23 @@ from .theme import (
     PEACH,
     SECONDARY_TEXT,
     SUCCESS,
+    SURFACE0,
+    SURFACE1,
     TEXT,
     WARNING,
     build_stylesheet,
 )
-from .utils import get_icon_path, open_folder, qtime_to_seconds
+from .utils import (
+    filter_existing_files,
+    get_icon_path,
+    is_image_file,
+    open_folder,
+    qtime_to_seconds,
+    shutdown_command,
+)
 from .workers import BatchConversionManager, BatchItem, ConversionThread
 
-VERSION = "1.2.0"
+VERSION = __version__
 
 
 class MainWindow(QMainWindow):
@@ -77,6 +103,10 @@ class MainWindow(QMainWindow):
         self._batch_signals_connected: bool = False
         # True when the loaded file has no video stream (audio-only)
         self._audio_mode: bool = False
+        # True when the loaded file is a still image (image conversion mode)
+        self._image_mode: bool = False
+        # ffprobe summary of the loaded file, reused for the size estimate
+        self._current_summary: dict[str, Any] | None = None
         # Runtime status tracked so language switches can re-render correctly
         self._ffmpeg_ok: bool = True
         self._hw_info: str = ""
@@ -86,6 +116,34 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(200, self._check_ffmpeg)
 
     # ─── UI INIT ────────────────────────────────────────────────────────────────
+    def _apply_dark_palette(self) -> None:
+        """
+        Give Qt's palette-driven widgets the dark theme.
+
+        The stylesheet only covers the widgets it names; anything Qt paints
+        from the palette (message boxes, non-native file dialogs, menus,
+        tooltips) would otherwise keep the system's *light* background while
+        inheriting our light text color, producing unreadable dialogs.
+        """
+        app = QApplication.instance()
+        if not isinstance(app, QApplication):
+            return
+        pal = QPalette()
+        pal.setColor(QPalette.Window, QColor(BASE))
+        pal.setColor(QPalette.WindowText, QColor(TEXT))
+        pal.setColor(QPalette.Base, QColor(CRUST))
+        pal.setColor(QPalette.AlternateBase, QColor(SURFACE0))
+        pal.setColor(QPalette.Text, QColor(TEXT))
+        pal.setColor(QPalette.Button, QColor(SURFACE1))
+        pal.setColor(QPalette.ButtonText, QColor(TEXT))
+        pal.setColor(QPalette.ToolTipBase, QColor(SURFACE0))
+        pal.setColor(QPalette.ToolTipText, QColor(TEXT))
+        pal.setColor(QPalette.Highlight, QColor(ACCENT))
+        pal.setColor(QPalette.HighlightedText, QColor(BASE))
+        for role in (QPalette.Text, QPalette.ButtonText, QPalette.WindowText):
+            pal.setColor(QPalette.Disabled, role, QColor(OVERLAY0))
+        app.setPalette(pal)
+
     def init_ui(self) -> None:
         self.setWindowTitle(tr("app_name"))
         self.setMinimumSize(900, 600)
@@ -98,6 +156,7 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(16, 12, 16, 12)
         main_layout.setSpacing(10)
 
+        self._apply_dark_palette()
         self.setStyleSheet(build_stylesheet())
         self._create_header(main_layout)
 
@@ -110,6 +169,7 @@ class MainWindow(QMainWindow):
         self._create_info_panel(main_layout)
         self._create_mode_toggle(main_layout)
         self._create_preset_section(main_layout)
+        self._create_image_section(main_layout)
 
         self.content_splitter = QSplitter(Qt.Horizontal)  # type: ignore[attr-defined]
 
@@ -151,6 +211,7 @@ class MainWindow(QMainWindow):
 
         self.preset_section.setVisible(self.simple_mode)
         self.content_splitter.setVisible(not self.simple_mode)
+        self._update_mode_visibility()
 
     def _create_header(self, layout: QVBoxLayout) -> None:
         header = QFrame()
@@ -186,8 +247,14 @@ class MainWindow(QMainWindow):
 
         header_layout.addWidget(self.header_title)
         header_layout.addSpacing(8)
+        self.report_btn = QPushButton(tr("btn_report"))
+        self.report_btn.setToolTip(tr("tip_report"))
+        self.report_btn.clicked.connect(self.report_problem)
+
         header_layout.addWidget(self.subtitle)
         header_layout.addStretch()
+        header_layout.addWidget(self.report_btn)
+        header_layout.addSpacing(8)
         header_layout.addWidget(self.lang_combo)
         header_layout.addSpacing(8)
         header_layout.addWidget(self.hw_status)
@@ -227,6 +294,15 @@ class MainWindow(QMainWindow):
         self.video_fps_label.setText(tr("label_fps"))
         self.audio_format_label.setText(tr("label_format"))
         self.audio_bitrate_label.setText(tr("label_bitrate"))
+
+        self.image_group.setTitle(tr("group_image"))
+        self.frame_check.setText(tr("chk_frame_export"))
+        self.frame_check.setToolTip(tr("tip_frame_export"))
+        self.frame_time_label.setText(tr("label_frame_time"))
+        self.image_format_label.setText(tr("label_format"))
+        self.image_quality_label.setText(tr("label_quality"))
+        self.image_quality.setToolTip(tr("tip_image_quality"))
+        self.image_resolution_label.setText(tr("label_resolution"))
         self.trim_start_label.setText(tr("label_trim_start"))
         self.trim_end_label.setText(tr("label_trim_end"))
         self.trim_duration_label.setText(tr("label_trim_duration"))
@@ -242,6 +318,14 @@ class MainWindow(QMainWindow):
         self.add_batch_btn.setText(tr("btn_add_batch"))
         self.remove_batch_btn.setText(tr("btn_remove_batch"))
         self.clear_batch_btn.setText(tr("btn_clear_batch"))
+        self.shutdown_check.setText(tr("chk_shutdown"))
+        self.shutdown_check.setToolTip(tr("tip_shutdown"))
+        self.extract_audio_check.setText(tr("chk_extract_audio"))
+        self.extract_audio_check.setToolTip(tr("tip_extract_audio"))
+        self.report_btn.setText(tr("btn_report"))
+        self.report_btn.setToolTip(tr("tip_report"))
+        self.target_check.setText(tr("chk_target_size"))
+        self.target_size.setSuffix(f" {tr('label_target_size')}")
 
         self.progress_group.setTitle(tr("group_progress"))
         self.convert_btn.setToolTip(tr("tip_convert"))
@@ -256,10 +340,11 @@ class MainWindow(QMainWindow):
 
         # Resolution / FPS combos (labels translatable, data stable)
         res_dict = dict(self._resolution_data)
-        for i in range(self.video_resolution.count()):
-            data = self.video_resolution.itemData(i)
-            if data and str(data) in res_dict:
-                self.video_resolution.setItemText(i, res_dict[str(data)])
+        for combo in (self.video_resolution, self.image_resolution):
+            for i in range(combo.count()):
+                data = combo.itemData(i)
+                if data and str(data) in res_dict:
+                    combo.setItemText(i, res_dict[str(data)])
         fps_dict = dict(self._fps_data)
         for i in range(self.video_fps.count()):
             data = self.video_fps.itemData(i)
@@ -284,6 +369,9 @@ class MainWindow(QMainWindow):
         if self._preset_settings:
             desc_key = self._preset_settings.get("desc_key", "")
             self.preset_desc.setText(tr(desc_key) if desc_key else "")
+
+        self._update_estimate()
+        self._update_mode_visibility()
 
     def _create_file_section(self, layout: QHBoxLayout) -> None:
         file_frame = QFrame()
@@ -339,6 +427,12 @@ class MainWindow(QMainWindow):
         self.info_duration = QLabel("")
         self.info_duration.setStyleSheet(f"color: {WARNING}; font-size: 12px;")
         info_layout.addWidget(self.info_duration)
+        info_layout.addSpacing(16)
+
+        # Output-size hint: refreshed whenever a setting that affects it changes.
+        self.info_estimate = QLabel("")
+        self.info_estimate.setStyleSheet(f"color: {MAUVE}; font-size: 12px;")
+        info_layout.addWidget(self.info_estimate)
         info_layout.addStretch()
 
         layout.addWidget(self.info_frame)
@@ -449,10 +543,119 @@ class MainWindow(QMainWindow):
         row7.addStretch()
         adv.addLayout(row7)
 
+        row9 = QHBoxLayout()
+        self.extract_audio_check = QCheckBox(tr("chk_extract_audio"))
+        self.extract_audio_check.setToolTip(tr("tip_extract_audio"))
+        self.extract_audio_check.toggled.connect(self._update_mode_visibility)
+        row9.addWidget(self.extract_audio_check)
+        row9.addStretch()
+        adv.addLayout(row9)
+
+        row8 = QHBoxLayout()
+        self.target_check = QCheckBox(tr("chk_target_size"))
+        self.target_check.setToolTip(tr("tip_target_size"))
+        self.target_check.toggled.connect(self._on_target_size_toggle)
+        row8.addWidget(self.target_check)
+        self.target_size = QSpinBox()
+        self.target_size.setRange(1, 20000)
+        self.target_size.setValue(25)
+        self.target_size.setSuffix(f" {tr('label_target_size')}")
+        self.target_size.valueChanged.connect(self._update_estimate)
+        row8.addWidget(self.target_size)
+        row8.addStretch()
+        adv.addLayout(row8)
+
+        # Any of these changes the estimated output size.
+        self.video_format.currentIndexChanged.connect(self._update_estimate)
+        self.video_crf.valueChanged.connect(self._update_estimate)
+        self.video_resolution.currentIndexChanged.connect(self._update_estimate)
+        self.video_fps.currentIndexChanged.connect(self._update_estimate)
+        self.video_keep_audio.toggled.connect(self._update_estimate)
+
         self.advanced_video.setVisible(False)
         video_layout.addWidget(self.advanced_video)
         video_layout.addStretch()
         layout.addWidget(self.video_group)
+
+    def _create_image_section(self, layout: QVBoxLayout) -> None:
+        """
+        Image output.
+
+        Used in two situations: a still image was loaded (convert it), or the
+        user asked for a single frame of a video ("export frame").
+        """
+        self.image_group = QGroupBox(tr("group_image"))
+        image_layout = QVBoxLayout(self.image_group)
+
+        row0 = QHBoxLayout()
+        self.frame_check = QCheckBox(tr("chk_frame_export"))
+        self.frame_check.setToolTip(tr("tip_frame_export"))
+        self.frame_check.toggled.connect(self._update_mode_visibility)
+        row0.addWidget(self.frame_check)
+
+        self.frame_time_label = QLabel(tr("label_frame_time"))
+        row0.addWidget(self.frame_time_label)
+        self.frame_time = QTimeEdit(QTime(0, 0, 0))
+        self.frame_time.setDisplayFormat("HH:mm:ss")
+        self.frame_time.timeChanged.connect(self._update_estimate)
+        row0.addWidget(self.frame_time)
+        row0.addStretch()
+        image_layout.addLayout(row0)
+
+        row1 = QHBoxLayout()
+        self.image_format_label = QLabel(tr("label_format"))
+        row1.addWidget(self.image_format_label)
+        self.image_format = QComboBox()
+        self.image_format.setToolTip(tr("tip_format"))
+        self.image_format.addItems(self.ffmpeg.get_supported_image_formats())
+        self.image_format.currentIndexChanged.connect(self._on_image_format_change)
+        row1.addWidget(self.image_format)
+        row1.addStretch()
+        image_layout.addLayout(row1)
+
+        row2 = QHBoxLayout()
+        self.image_quality_label = QLabel(tr("label_quality"))
+        row2.addWidget(self.image_quality_label)
+        self.image_quality = QSlider(Qt.Horizontal)  # type: ignore[attr-defined]
+        self.image_quality.setToolTip(tr("tip_image_quality"))
+        self.image_quality.setRange(1, 100)
+        self.image_quality.setValue(92)
+        row2.addWidget(self.image_quality, 1)
+        self.image_quality_value = QLabel("92")
+        self.image_quality_value.setStyleSheet("min-width: 30px;")
+        self.image_quality.valueChanged.connect(lambda v: self.image_quality_value.setText(str(v)))
+        row2.addWidget(self.image_quality_value)
+        row2.addStretch()
+        image_layout.addLayout(row2)
+
+        row3 = QHBoxLayout()
+        self.image_resolution_label = QLabel(tr("label_resolution"))
+        row3.addWidget(self.image_resolution_label)
+        self.image_resolution = QComboBox()
+        self.image_resolution.setToolTip(tr("tip_resolution"))
+        for data_val, display in RESOLUTION_MAP.items():
+            self.image_resolution.addItem(display, data_val)
+        self.image_resolution.currentIndexChanged.connect(self._update_estimate)
+        row3.addWidget(self.image_resolution)
+        row3.addStretch()
+        image_layout.addLayout(row3)
+
+        self._on_image_format_change(0)
+        layout.addWidget(self.image_group)
+
+    def _on_image_format_change(self, index: int) -> None:
+        """Only JPG/WebP have a meaningful quality knob."""
+        fmt = self.ffmpeg.IMAGE_FORMATS.get(self.image_format.currentText())
+        adjustable = fmt is not None and fmt.get("quality") in ("mjpeg", "webp")
+        self.image_quality.setEnabled(adjustable)
+        self.image_quality_value.setEnabled(adjustable)
+        self._update_estimate()
+
+    def _on_target_size_toggle(self, checked: bool) -> None:
+        """A target size replaces the CRF knob, so disable it to be explicit."""
+        self.video_crf.setEnabled(not checked)
+        self.crf_info.setEnabled(not checked)
+        self._update_estimate()
 
     def _create_audio_section(self, layout: QVBoxLayout) -> None:
         """Audio-only conversion (MP3, FLAC, ...) from any media file."""
@@ -465,6 +668,7 @@ class MainWindow(QMainWindow):
         self.audio_format = QComboBox()
         self.audio_format.setToolTip(tr("tip_format"))
         self.audio_format.addItems(self.ffmpeg.get_supported_audio_formats())
+        self.audio_format.currentIndexChanged.connect(self._update_estimate)
         row1.addWidget(self.audio_format)
         row1.addStretch()
         audio_layout.addLayout(row1)
@@ -474,6 +678,7 @@ class MainWindow(QMainWindow):
         row2.addWidget(self.audio_bitrate_label)
         self.audio_bitrate = QComboBox()
         self.audio_bitrate.addItems(["192k", "128k", "256k", "320k", "auto"])
+        self.audio_bitrate.currentIndexChanged.connect(self._update_estimate)
         row2.addWidget(self.audio_bitrate)
         row2.addStretch()
         audio_layout.addLayout(row2)
@@ -600,6 +805,11 @@ class MainWindow(QMainWindow):
         self.batch_progress.setFormat("%v / %m")
         batch_layout.addWidget(self.batch_progress)
 
+        # Off by default: only an explicit opt-in may power the machine off.
+        self.shutdown_check = QCheckBox(tr("chk_shutdown"))
+        self.shutdown_check.setToolTip(tr("tip_shutdown"))
+        batch_layout.addWidget(self.shutdown_check)
+
         layout.addWidget(self.batch_group)
 
     def _create_progress_section(self, layout: QVBoxLayout) -> None:
@@ -723,6 +933,13 @@ class MainWindow(QMainWindow):
         self.settings.setValue("video/keep_audio", self.video_keep_audio.isChecked())
         self.settings.setValue("audio/format", self.audio_format.currentText())
         self.settings.setValue("audio/bitrate", self.audio_bitrate.currentText())
+        self.settings.setValue("video/target_size", self.target_size.value())
+        self.settings.setValue("video/target_enabled", self.target_check.isChecked())
+        self.settings.setValue("image/format", self.image_format.currentText())
+        self.settings.setValue("image/quality", self.image_quality.value())
+        image_res = self.image_resolution.currentData()
+        self.settings.setValue("image/resolution", str(image_res) if image_res else "")
+        self.settings.setValue("batch/shutdown", self.shutdown_check.isChecked())
         preset_id = self.preset_combo.currentData()
         if preset_id and isinstance(preset_id, str):
             self.settings.setValue("preset/id", preset_id)
@@ -785,6 +1002,33 @@ class MainWindow(QMainWindow):
         if preset_id and isinstance(preset_id, str) and self.preset_combo.findData(preset_id) >= 0:
             self.preset_combo.setCurrentIndex(self.preset_combo.findData(preset_id))
 
+        target_enabled = self.settings.value("video/target_enabled")
+        if target_enabled is not None:
+            self.target_check.setChecked(str(target_enabled).lower() in ("true", "1", "yes"))
+        target_size = self.settings.value("video/target_size")
+        if target_size is not None:
+            with contextlib.suppress(TypeError, ValueError):
+                self.target_size.setValue(int(target_size))
+
+        image_format = self.settings.value("image/format")
+        if image_format and isinstance(image_format, str) and self.image_format.findText(image_format) >= 0:
+            self.image_format.setCurrentText(image_format)
+        image_quality = self.settings.value("image/quality")
+        if image_quality is not None:
+            with contextlib.suppress(TypeError, ValueError):
+                self.image_quality.setValue(int(image_quality))
+        image_res = self.settings.value("image/resolution")
+        if image_res and isinstance(image_res, str):
+            idx = self.image_resolution.findData(image_res)
+            if idx >= 0:
+                self.image_resolution.setCurrentIndex(idx)
+
+        shutdown = self.settings.value("batch/shutdown")
+        if shutdown is not None:
+            self.shutdown_check.setChecked(str(shutdown).lower() in ("true", "1", "yes"))
+
+        self._restore_batch()
+
     def closeEvent(self, event: QCloseEvent) -> None:  # type: ignore[override]
         self._save_settings()
         if (self.current_thread and self.current_thread.isRunning()) or self.batch_manager.is_running():
@@ -846,6 +1090,11 @@ class MainWindow(QMainWindow):
 
     def _set_simple_mode(self, simple: bool) -> None:
         self.simple_mode = simple
+        if simple:
+            # These live inside expert-only groups: leaving them set would keep
+            # changing the output type with no visible way to undo it.
+            self.frame_check.setChecked(False)
+            self.extract_audio_check.setChecked(False)
         self.preset_section.setVisible(simple)
         self.content_splitter.setVisible(not simple)
         self.advanced_video.setVisible(not simple)
@@ -857,6 +1106,8 @@ class MainWindow(QMainWindow):
             self.mode_label.setText(tr("mode_expert"))
             if self._preset_settings:
                 self._apply_preset_to_controls(self._preset_settings)
+        # The batch list (and therefore the convert button) is mode-dependent.
+        self._update_batch_ui()
 
     def _on_preset_change(self, index: int) -> None:
         preset_id = self.preset_combo.itemData(index)
@@ -928,6 +1179,9 @@ class MainWindow(QMainWindow):
         self.output_file = None
         self.media_info = None
         self._audio_mode = False
+        self._image_mode = False
+        self._current_summary = None
+        self.extract_audio_check.setChecked(False)
         self.file_path.clear()
         self._update_batch_ui()
         self.log_output.clear()
@@ -935,6 +1189,8 @@ class MainWindow(QMainWindow):
         self.eta_label.setText("")
         self.speed_label.setText("")
         self.info_frame.setVisible(False)
+        self.frame_check.setChecked(False)
+        self._update_mode_visibility()
         self.status_bar.showMessage(tr("status_ready"))
 
     def load_file(self, file_path: str) -> None:
@@ -950,7 +1206,9 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(0)
 
         summary = self.ffmpeg.get_file_summary(file_path)
-        self._audio_mode = summary is not None and not summary.get("video_codec")
+        self._current_summary = summary
+        self._image_mode = is_image_file(file_path)
+        self._audio_mode = summary is not None and not summary.get("video_codec") and not self._image_mode
         if summary:
             self.info_name.setText(tr("log_file_info", summary['filename']))
             self.info_size.setText(tr("log_file_size", summary['size_mb']))
@@ -963,7 +1221,9 @@ class MainWindow(QMainWindow):
             acodec = summary.get('audio_codec') or "-"
             self.info_audio.setText(f"🎵 {acodec.upper() if acodec != '-' else '-'}")
             bitrate_str = f" · {summary['bitrate']} kbps" if summary.get('bitrate') else ""
-            self.info_duration.setText(f"⏱ {summary['duration_str']}{bitrate_str}")
+            # Still images have no duration; don't claim 00:00:00.
+            duration_str = summary['duration_str'] if summary.get('duration') else "—"
+            self.info_duration.setText(f"⏱ {duration_str}{bitrate_str}")
             self.info_frame.setVisible(True)
 
         codecs = self.ffmpeg.get_codecs(file_path)
@@ -995,9 +1255,66 @@ class MainWindow(QMainWindow):
         self._auto_detect_best(codecs, width, height)
         self._update_mode_visibility()
 
+    def _frame_export_enabled(self) -> bool:
+        """True when the user asked for a single frame instead of a video."""
+        return bool(
+            self.frame_check.isChecked() and not self._image_mode and not self._audio_mode
+        )
+
     def _update_mode_visibility(self) -> None:
-        """Show the audio section when the loaded file has no video stream."""
-        self.audio_group.setVisible(self._audio_mode)
+        """
+        Show only the option groups that apply.
+
+        Video, audio-only and image inputs each get their own group; the video
+        and trim groups are hidden when a single frame is being exported.
+        """
+        if not hasattr(self, "video_group"):
+            return
+        frame_export = self._frame_export_enabled()
+        self.audio_group.setVisible(self._audio_mode or self._extract_audio_enabled())
+        # Exporting one frame makes every video/trim control irrelevant.
+        self.video_group.setVisible(not self._audio_mode and not self._image_mode and not frame_export)
+        self.trim_group.setVisible(not self._audio_mode and not self._image_mode and not frame_export)
+        self.image_group.setVisible((self._image_mode or not self.simple_mode) and not self._audio_mode)
+        self.frame_check.setVisible(not self._image_mode)
+        self.frame_time_label.setVisible(frame_export)
+        self.frame_time.setVisible(frame_export)
+        self._update_estimate()
+
+    def _extract_audio_enabled(self) -> bool:
+        """True when the user wants the audio track of a video, without video."""
+        return bool(
+            self.extract_audio_check.isChecked() and not self._audio_mode and not self._image_mode
+        )
+
+    def _conversion_plan(self, mode: str) -> tuple[float | None, float | None]:
+        """Trim parameters for `mode`; exporting a frame reuses the start time."""
+        if mode == "image":
+            if self._image_mode:
+                return None, None
+            return float(qtime_to_seconds(self.frame_time.time())), None
+        return self._get_trim_params()
+
+    def _update_estimate(self, *_args: object) -> None:
+        """Refresh the estimated output size shown in the info panel."""
+        if not hasattr(self, "video_format") or not hasattr(self, "info_estimate"):
+            return
+        try:
+            mode, settings = self._get_settings_from_ui()
+        except (AttributeError, KeyError, TypeError):
+            return
+
+        summary = dict(self._current_summary) if self._current_summary else None
+        _, trim_duration = self._conversion_plan(mode)
+        if summary and trim_duration:
+            duration = float(summary.get("duration") or trim_duration)
+            summary["duration"] = min(duration, float(trim_duration))
+
+        estimate = self.ffmpeg.estimate_output_size_mb(summary, settings)
+        if estimate and estimate > 0:
+            self.info_estimate.setText(tr("estimate_size", f"{estimate:.1f}"))
+        else:
+            self.info_estimate.setText(tr("estimate_unknown"))
 
     def _auto_detect_best(self, codecs: dict[str, str | None], width: int | None, height: int | None) -> None:
         if width and height:
@@ -1072,6 +1389,7 @@ class MainWindow(QMainWindow):
         item.setData(Qt.UserRole, os.path.basename(file_path))  # type: ignore[attr-defined]
         self.batch_list.addItem(item)
         self._update_batch_ui()
+        self._save_batch()
 
     def _remove_from_batch(self) -> None:
         rows = sorted([self.batch_list.row(item) for item in self.batch_list.selectedItems()], reverse=True)
@@ -1080,17 +1398,48 @@ class MainWindow(QMainWindow):
                 self.batch_items.pop(row)
             self.batch_list.takeItem(row)
         self._update_batch_ui()
+        self._save_batch()
 
     def _clear_batch(self) -> None:
         self.batch_items.clear()
         self.batch_list.clear()
         self._update_batch_ui()
+        self._save_batch()
+
+    def _save_batch(self) -> None:
+        """Persist the queue so it survives a restart (paths only)."""
+        self.settings.setValue("batch/items", [path for path, _ in self.batch_items])
+
+    def _restore_batch(self) -> None:
+        """Reload the queue from the last session, skipping files that vanished."""
+        stored = self.settings.value("batch/items")
+        if not stored:
+            return
+        if isinstance(stored, str):
+            stored = [stored]
+        paths = filter_existing_files(list(stored))
+        for path in paths:
+            self._add_single_to_batch(path)
+        if paths:
+            self.log_output.append(tr("log_batch_restored", len(paths)))
 
     def _update_batch_ui(self) -> None:
+        """Refresh the convert button for the current queue and mode.
+
+        Deliberately does *not* persist the queue: this runs while settings are
+        being restored (before `_restore_batch`), and saving an empty queue
+        there would wipe the batch the user left behind. Persistence belongs to
+        the queue mutations (`_add_single_to_batch`, `_remove_from_batch`,
+        `_clear_batch`).
+        """
         if not hasattr(self, "batch_list"):
             return
         count = self.batch_list.count()
-        if count > 0:
+        # In simple mode the batch list is hidden, so the queue must not take
+        # over the convert button: the user would be told "convert N files"
+        # while looking at a window that cannot show, edit or run that batch.
+        batching = count > 0 and not self.simple_mode
+        if batching:
             self.convert_btn.setText(tr("btn_convert_batch", count))
         else:
             self.convert_btn.setText(tr("btn_convert"))
@@ -1099,7 +1448,7 @@ class MainWindow(QMainWindow):
             self.batch_manager.is_running()
         )
         if not running:
-            self.convert_btn.setEnabled(self.input_file is not None or count > 0)
+            self.convert_btn.setEnabled(self.input_file is not None or batching)
 
     # ─── CONVERSION ─────────────────────────────────────────────────────────────
     def _get_trim_params(self) -> tuple[float | None, float | None]:
@@ -1131,6 +1480,8 @@ class MainWindow(QMainWindow):
                 "audio_bitrate": "192k",
                 "hw_accel": False,
                 "extension": fmt["extension"] if fmt else ".mp4",
+                # Presets always keep constant quality; no target size.
+                "target_size_mb": None,
             }
 
         fmt_name = self.video_format.currentText()
@@ -1150,8 +1501,25 @@ class MainWindow(QMainWindow):
             "copy_audio": self.video_keep_audio.isChecked() and not is_gif,
             "audio_codec": "aac",
             "audio_bitrate": "192k",
-            "hw_accel": self.hw_check.isChecked() if self.hw_check.isVisible() else False,
+            # isVisibleTo: the checkbox counts as active even when the window is
+            # not shown yet (headless runs, tests).
+            "hw_accel": self.hw_check.isChecked() if self.hw_check.isVisibleTo(self) else False,
             "extension": fmt["extension"] if fmt else ".mp4",
+            "target_size_mb": self.target_size.value() if self.target_check.isChecked() else None,
+        }
+
+    def _collect_image_settings(self) -> dict[str, Any]:
+        """Build the image settings dict (still image or exported frame)."""
+        fmt_name = self.image_format.currentText()
+        fmt = self.ffmpeg.IMAGE_FORMATS.get(fmt_name)
+        res_data = self.image_resolution.currentData()
+        return {
+            "format": fmt_name,
+            "quality": self.image_quality.value(),
+            "resolution": RESOLUTION_MAP.get(str(res_data)) if res_data else None,
+            "extension": fmt["extension"] if fmt else ".png",
+            "keep_audio": False,
+            "target_size_mb": None,
         }
 
     def _get_settings_from_ui(self) -> tuple[str, dict[str, Any]]:
@@ -1163,19 +1531,48 @@ class MainWindow(QMainWindow):
                 "bitrate": self.audio_bitrate.currentText(),
                 "extension": self.ffmpeg.AUDIO_FORMATS.get(fmt_name, {}).get("extension", ".mp3"),
             }
+        if self._image_mode or self._frame_export_enabled():
+            return "image", self._collect_image_settings()
+        if self._extract_audio_enabled():
+            fmt_name = self.audio_format.currentText()
+            fmt = self.ffmpeg.AUDIO_FORMATS.get(fmt_name, {})
+            return "extract_audio", {
+                "format": fmt_name,
+                "audio_codec": fmt.get("audio_codec", "libmp3lame"),
+                "bitrate": self.audio_bitrate.currentText(),
+                "extension": fmt.get("extension", ".mp3"),
+                "target_size_mb": None,
+            }
         if self.simple_mode and self._preset_settings:
             return "video", self._collect_video_settings(self._preset_settings)
         return "video", self._collect_video_settings()
 
     def _build_output_path(self, input_path: str) -> str:
         mode, settings = self._get_settings_from_ui()
-        if mode == "audio":
+        if mode in ("audio", "extract_audio"):
             ext = settings.get("extension", ".mp3")
+        elif mode == "image":
+            ext = settings.get("extension", ".png")
         else:
             fmt = self.ffmpeg.VIDEO_FORMATS.get(settings["format"])
             ext = fmt["extension"] if fmt else ".mp4"
         base, _ = os.path.splitext(input_path)
         return f"{base}_shuttle{ext}"
+
+    def _warn_if_target_size_unusable(
+        self, mode: str, settings: dict[str, Any], input_file: str, trim_duration: float | None
+    ) -> None:
+        """
+        Log the documented warning when a target size silently falls back to CRF.
+
+        Target size is derived from the duration, so a file whose duration
+        ffprobe cannot read would otherwise be converted at constant quality
+        without telling the user anything.
+        """
+        if mode != "video" or not settings.get("target_size_mb"):
+            return
+        if self.ffmpeg.video_target_bitrate(settings, input_file, trim_duration) <= 0:
+            self.log_output.append(tr("log_target_size_fallback", os.path.basename(input_file)))
 
     def start_conversion(self) -> None:
         if not self.ffmpeg.check_ffmpeg():
@@ -1194,14 +1591,17 @@ class MainWindow(QMainWindow):
         output_file = self._build_output_path(self.input_file)
 
         output_file, _ = QFileDialog.getSaveFileName(
-            self, tr("save_as_title"), output_file,
-            tr("all_files_filter")
+            self,
+            tr("title_image_save") if mode == "image" else tr("save_as_title"),
+            output_file,
+            tr("image_filter") if mode == "image" else tr("all_files_filter")
         )
         if not output_file:
             return
 
         self.output_file = output_file
-        trim_start, trim_duration = self._get_trim_params()
+        trim_start, trim_duration = self._conversion_plan(mode)
+        self._warn_if_target_size_unusable(mode, settings, self.input_file, trim_duration)
         cmd = self.ffmpeg.build_convert_command(
             self.input_file, output_file, mode, settings,
             trim_start=trim_start, trim_duration=trim_duration
@@ -1215,7 +1615,7 @@ class MainWindow(QMainWindow):
 
     def _start_batch_conversion(self) -> None:
         mode, settings = self._get_settings_from_ui()
-        trim_start, trim_duration = self._get_trim_params()
+        trim_start, trim_duration = self._conversion_plan(mode)
 
         items: list[BatchItem] = []
         for inp, _ in self.batch_items:
@@ -1225,8 +1625,9 @@ class MainWindow(QMainWindow):
                 trim_start=trim_start, trim_duration=trim_duration
             )
             if cmd:
+                self._warn_if_target_size_unusable(mode, settings, inp, trim_duration)
                 desc = f"{os.path.basename(inp)} → {os.path.basename(output)}"
-                items.append((inp, output, cmd, desc))
+                items.append(BatchItem(inp, output, cmd, desc, self.ffmpeg.build_software_fallback(cmd)))
 
         if not items:
             return
@@ -1263,10 +1664,16 @@ class MainWindow(QMainWindow):
         self.batch_progress.setVisible(False)
         self.log_output.append(tr("msg_batch_done", success_count, total))
         self.status_bar.showMessage(tr("msg_batch_status", success_count, total))
+        if self.batch_manager.cancelled:
+            # A cancelled batch also reaches this slot: reporting "completed"
+            # and offering to shut the machine down would be misleading.
+            self._update_batch_ui()
+            return
         QMessageBox.information(
             self, tr("title_batch_completed"),
             tr("msg_batch_completed", total, success_count, total - success_count)
         )
+        self._maybe_shutdown()
 
     def _run_conversion_thread(self, cmd: list[str], description: str, output_path: str) -> None:
         self.convert_btn.setEnabled(False)
@@ -1276,7 +1683,13 @@ class MainWindow(QMainWindow):
         self.speed_label.setText("")
         self.log_output.append(f"\n{'─' * 50}")
 
-        self.current_thread = ConversionThread(self.ffmpeg, cmd, description, output_path)
+        # When the job uses a GPU encoder, keep a CPU-only equivalent ready: it
+        # is used automatically if the hardware encoder fails at runtime.
+        fallback_cmd = self.ffmpeg.build_software_fallback(cmd)
+
+        self.current_thread = ConversionThread(
+            self.ffmpeg, cmd, description, output_path, fallback_cmd=fallback_cmd
+        )
         self.current_thread.progress.connect(self._on_progress)
         self.current_thread.conversion_done.connect(self._on_conversion_finished)
         self.current_thread.log.connect(self.log_output.append)
@@ -1307,6 +1720,68 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, tr("title_warning"), output_path)
         else:
             self.status_bar.showMessage(f"❌ {tr('msg_conversion_failed')}: {description}")
+
+    # ─── SHUTDOWN / DIAGNOSTICS ─────────────────────────────────────────────────
+    def _maybe_shutdown(self) -> None:
+        """Power the machine off after a finished batch, when the user opted in."""
+        if not self.shutdown_check.isChecked() or self.batch_manager.cancelled:
+            return
+        command = shutdown_command()
+        if command is None:
+            self.log_output.append(tr("msg_shutdown_unavailable"))
+            return
+        self._show_shutdown_dialog(command)
+
+    def _show_shutdown_dialog(self, command: list[str]) -> None:
+        """Countdown with 60 seconds to abort; blocks until the user decides."""
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Warning)
+        box.setWindowTitle(tr("title_shutdown"))
+        box.setText(tr("msg_shutdown_countdown", 60))
+        cancel_button = box.addButton(tr("btn_cancel_shutdown"), QMessageBox.RejectRole)
+        box.setStandardButtons(QMessageBox.NoButton)
+
+        remaining = 60
+        timer = QTimer(box)
+
+        def tick() -> None:
+            nonlocal remaining
+            remaining -= 1
+            if remaining <= 0:
+                timer.stop()
+                box.done(0)
+                return
+            box.setText(tr("msg_shutdown_countdown", remaining))
+
+        timer.timeout.connect(tick)
+        timer.start(1000)
+        box.exec_()
+        timer.stop()
+
+        if box.clickedButton() is cancel_button:
+            self.log_output.append(tr("msg_shutdown_cancelled"))
+            return
+        try:
+            subprocess.Popen(command)  # noqa: S603
+        except OSError:
+            self.log_output.append(tr("msg_shutdown_unavailable"))
+
+    def report_problem(self) -> None:
+        """Open a GitHub bug report pre-filled with diagnostics and the log tail."""
+        diagnostics = build_diagnostics(
+            version=VERSION,
+            language=get_language(),
+            ffmpeg_version=self.ffmpeg.get_ffmpeg_version(),
+            qt_version=QT_VERSION_STR,
+            log_text=self.log_output.toPlainText(),
+        )
+        if QDesktopServices.openUrl(QUrl(build_issue_url(diagnostics, title="[Bug] "))):
+            self.log_output.append(tr("msg_report_done"))
+            return
+        clipboard = QApplication.clipboard()
+        if clipboard is not None:
+            clipboard.setText(diagnostics)
+        QMessageBox.information(self, tr("title_warning"), tr("msg_report_copied"))
 
     def cancel_conversion(self) -> None:
         if self.ffmpeg:

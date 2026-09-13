@@ -1,6 +1,7 @@
 [project]
 name = "shuttle-codec"
-version = "1.2.0"
+# Single source of truth: src/__init__.py __version__ (read by setuptools).
+dynamic = ["version"]
 description = "A modern, easy-to-use desktop GUI for FFmpeg"
 readme = "README.md"
 license = "Apache-2.0"
@@ -36,6 +37,20 @@ shuttle-codec = "src.main:main"
 [tool.setuptools]
 packages = ["src"]
 
+[tool.setuptools.dynamic]
+version = { attr = "src.__version__" }
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+# The PyQt5 UI module is exercised headlessly (smoke tests), so full coverage
+# there is not meaningful; this floor guards against silent regressions.
+fail_under = 80
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
@@ -47,17 +62,26 @@ line-length = 120
 target-version = "py310"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM"]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM", "S"]
 # N802/N806/N803: Qt methods use camelCase by design.
-ignore = ["N802", "N806", "N803"]
+# S603/S607: the app runs external tools (ffmpeg/ffprobe, the platform file
+#            manager) that live on PATH, always with an argument list and never
+#            through a shell, which is precisely the safe way to do it.
+ignore = ["N802", "N806", "N803", "S603", "S607"]
 
 [tool.ruff.lint.per-file-ignores]
 # i18n.py holds long unbreakable string literals (filters, HTML, messages).
 "src/i18n.py" = ["E501"]
-# Tests create temp media files with delete=False and clean them up explicitly.
-"tests/*" = ["SIM115"]
-# create_demo.py imports the app after adjusting sys.path/os.chdir on purpose.
-"create_demo.py" = ["E402"]
+# Tests create temp media files with delete=False and clean them up explicitly;
+# `assert` and dummy /tmp paths are the normal way to write these tests.
+"tests/*" = ["SIM115", "S101", "S108"]
+# create_demo.py imports the app after adjusting sys.path/os.chdir on purpose,
+# and shells out to a fixed, developer-only FFmpeg command.
+"create_demo.py" = ["E402", "S605"]
+# The downloader reaches fixed https:// URLs, deliberately chmods the extracted
+# FFmpeg binary to 0755 and falls back to the literal `brew/apt/dnf/pacman/
+# zypper` install commands when the download fails.
+"download_ffmpeg.py" = ["S310", "S103", "S605"]
 
 [tool.mypy]
 python_version = "3.10"

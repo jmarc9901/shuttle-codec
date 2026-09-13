@@ -1,3 +1,4 @@
+import contextlib
 import json
 import os
 import re
@@ -22,6 +23,50 @@ CONTAINER_AUDIO_CODEC: dict[str, str] = {
     "WebM (VP9)": "libopus",
 }
 
+# Audio codecs each container accepts as-is for a stream-copy. Copying anything
+# else (for instance Vorbis into MP4) produces a file ffmpeg writes happily but
+# that many players and hardware decoders reject, so those tracks are re-encoded
+# instead of copied. Keep this list conservative: re-encoding is always safe.
+COPY_SAFE_AUDIO_CODECS: dict[str, frozenset[str]] = {
+    "MP4 (H.264)": frozenset({"aac", "mp3", "ac3", "eac3", "alac"}),
+    "MP4 (H.265)": frozenset({"aac", "mp3", "ac3", "eac3", "alac"}),
+    "MOV": frozenset({"aac", "mp3", "ac3", "eac3", "alac", "pcm_s16le", "pcm_s24le"}),
+    "MKV (H.264)": frozenset({
+        "aac", "mp3", "ac3", "eac3", "alac", "flac", "opus", "vorbis",
+        "pcm_s16le", "pcm_s24le", "dts", "truehd",
+    }),
+    "AVI": frozenset({"mp3", "ac3", "mp2", "pcm_s16le", "pcm_s24le"}),
+}
+
+# Used for containers missing from the map and for unknown source codecs:
+# the AAC-based set is the strictest one, and copying less often is harmless.
+DEFAULT_COPY_SAFE_AUDIO_CODECS: frozenset[str] = COPY_SAFE_AUDIO_CODECS["MP4 (H.264)"]
+
+# Hardware encoders and their software equivalent, used to retry a failed
+# conversion on the CPU (outdated driver, GPU busy, session limit, ...).
+SOFTWARE_ALTERNATIVES: dict[str, str] = {
+    "h264_nvenc": "libx264",
+    "hevc_nvenc": "libx265",
+    "h264_amf": "libx264",
+    "hevc_amf": "libx265",
+    "h264_qsv": "libx264",
+    "hevc_qsv": "libx265",
+    "h264_videotoolbox": "libx264",
+    "hevc_videotoolbox": "libx265",
+}
+
+# Options that only exist for hardware encoders: dropped when building the
+# software fallback. `-cq`/`-global_quality`/`-qp_i` become `-crf` instead.
+QUALITY_OPTION_ALIASES: frozenset[str] = frozenset({"-cq", "-global_quality", "-qp_i"})
+DROPPED_OPTIONS_WITH_VALUE: frozenset[str] = frozenset({"-qp_p", "-qp_b", "-rc", "-quality"})
+
+# Default CRF per software encoder, used when the fallback has no quality flag.
+DEFAULT_CRF_BY_CODEC: dict[str, int] = {"libx264": 23, "libx265": 28}
+
+# Rough bits-per-pixel values for the output-size estimate (x264/x265/VP9 at
+# CRF 23, 30 fps). Only ever shown with a "≈" prefix: it is a rule of thumb.
+BASE_BPP: dict[str, float] = {"libx264": 0.07, "libx265": 0.045, "libvpx-vp9": 0.05}
+
 # libvpx-vp9 has no `-preset` option; the UI encoder preset is translated
 # into `-cpu-used` (0 = slowest/best, 8 = fastest).
 VP9_CPU_USED: dict[str, int] = {
@@ -42,6 +87,7 @@ class FFmpegHandler:
         self.ffmpeg_path: str = "ffmpeg"
         self.ffprobe_path: str = "ffprobe"
         self._process: subprocess.Popen | None = None
+        self._cancelled: bool = False
         self._hw_cache: str | None = None
         self._encoders_cache: str | None = None
         # Last ffprobe result, keyed by (path, mtime, size), so loading a file
@@ -147,6 +193,22 @@ class FFmpegHandler:
                 return stream.get("width"), stream.get("height")
         return None, None
 
+    def can_copy_audio(self, input_file: str, fmt_name: str) -> bool:
+        """
+        True when the input's audio track can be stream-copied into `fmt_name`.
+
+        Stream-copying is lossless and instant, but only safe when the target
+        container really supports the source codec: ffmpeg muxes Vorbis into
+        MP4 without complaining, yet plenty of players and hardware decoders
+        reject the resulting file. A codec that cannot be determined is never
+        copied, because re-encoding is always safe.
+        """
+        source = str(self.get_codecs(input_file).get("audio") or "").lower()
+        if not source:
+            return False
+        safe = COPY_SAFE_AUDIO_CODECS.get(fmt_name, DEFAULT_COPY_SAFE_AUDIO_CODECS)
+        return source in safe
+
     def _load_encoders_cache(self) -> None:
         if self._encoders_cache is not None:
             return
@@ -248,6 +310,209 @@ class FFmpegHandler:
         "WMA": {"audio_codec": "wmav2", "extension": ".wma", "bitrates": ["128k", "192k", "256k", "320k"]},
     }
 
+    # Still images produced by the "image" mode: either an image-to-image
+    # conversion or a single frame exported from a video.
+    # `quality` describes how the 1-100 UI slider is translated:
+    #   "mjpeg" -> -q:v 2 (best) .. 31 (worst)   |  "webp" -> -q:v 1..100
+    IMAGE_FORMATS: dict[str, dict[str, Any]] = {
+        "PNG": {"image_codec": "png", "extension": ".png", "quality": "png"},
+        "JPG": {"image_codec": "mjpeg", "extension": ".jpg", "quality": "mjpeg"},
+        "WebP": {"image_codec": "libwebp", "extension": ".webp", "quality": "webp"},
+        "BMP": {"image_codec": "bmp", "extension": ".bmp", "quality": None},
+        "TIFF": {"image_codec": "tiff", "extension": ".tiff", "quality": None},
+    }
+
+    # ─── Hardware fallback ──────────────────────────────────────────────────
+    def build_software_fallback(self, cmd: list[str]) -> list[str] | None:
+        """
+        Return an equivalent command that encodes on the CPU, or None when the
+        command does not use a hardware encoder.
+
+        Hardware encoding can still fail at runtime (outdated driver, GPU in
+        use, session limit), so the worker retries the job in software instead
+        of failing the whole conversion.
+        """
+        try:
+            index = cmd.index("-c:v")
+        except ValueError:
+            return None
+        if index + 1 >= len(cmd):
+            return None
+        software = SOFTWARE_ALTERNATIVES.get(cmd[index + 1])
+        if software is None:
+            return None
+
+        fallback: list[str] = []
+        quality_value: str | None = None
+        # Where the removed quality flag used to be: options must stay before
+        # the output file, otherwise ffmpeg warns about trailing options.
+        insert_at: int | None = None
+        i = 0
+        while i < len(cmd):
+            token = cmd[i]
+            if i == index + 1:
+                fallback.append(software)
+                i += 1
+                continue
+            if token in DROPPED_OPTIONS_WITH_VALUE:
+                insert_at = len(fallback) if insert_at is None else insert_at
+                i += 2
+                continue
+            if token in QUALITY_OPTION_ALIASES:
+                insert_at = len(fallback) if insert_at is None else insert_at
+                if quality_value is None and i + 1 < len(cmd):
+                    quality_value = cmd[i + 1]
+                i += 2
+                continue
+            fallback.append(token)
+            i += 1
+
+        if insert_at is None:
+            # No quality flag to rewrite: insert before the output path, which
+            # is always the last token of the command.
+            insert_at = max(0, len(fallback) - 1)
+
+        if quality_value is not None:
+            fallback[insert_at:insert_at] = ["-crf", quality_value]
+        elif "-crf" not in fallback and "-b:v" not in fallback:
+            fallback[insert_at:insert_at] = ["-crf", str(DEFAULT_CRF_BY_CODEC.get(software, 23))]
+        return fallback
+
+    # ─── Target size / size estimate ────────────────────────────────────────
+    @staticmethod
+    def compute_target_video_bitrate(
+        target_mb: float, duration_s: float, audio_kbps: int = 0, overhead: float = 0.97
+    ) -> int:
+        """Video bitrate in kbps that makes the output land close to `target_mb`."""
+        if target_mb <= 0 or duration_s <= 0:
+            return 0
+        total_kbps = (float(target_mb) * 8 * 1024 * 1024 / float(duration_s)) / 1000
+        video_kbps = int(total_kbps * overhead) - max(0, int(audio_kbps))
+        return max(50, video_kbps)
+
+    @staticmethod
+    def _parse_kbps(value: Any, default: int = 192) -> int:
+        """Parse an audio bitrate such as "192k" into kbps."""
+        try:
+            return max(0, int(str(value).rstrip("kK")))
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _scale_pixels(value: Any) -> int | None:
+        """Return the pixel count of a "width:height" scale value, if parseable."""
+        if not value:
+            return None
+        parts = str(value).split(":")
+        if len(parts) != 2:
+            return None
+        try:
+            width, height = int(parts[0]), int(parts[1])
+        except ValueError:
+            return None
+        if width <= 0 or height <= 0:
+            return None
+        return width * height
+
+    def video_target_bitrate(
+        self, settings: dict[str, Any], input_file: str, trim_duration: int | float | None
+    ) -> int:
+        """
+        Video bitrate (kbps) for the requested target size; 0 when not usable.
+
+        Returns 0 when no target size is set *and* when one is set but cannot be
+        honoured (no readable duration): the caller uses that to warn the user
+        that the job falls back to constant quality.
+        """
+        target_mb = settings.get("target_size_mb")
+        if not target_mb:
+            return 0
+        try:
+            target_mb = float(target_mb)
+        except (TypeError, ValueError):
+            return 0
+        if target_mb <= 0:
+            return 0
+
+        duration = settings.get("duration")
+        if not duration:
+            summary = self.get_file_summary(input_file) or {}
+            duration = summary.get("duration")
+        if not duration:
+            return 0
+        duration = float(duration)
+        if trim_duration:
+            duration = min(duration, float(trim_duration))
+
+        audio_kbps = self._parse_kbps(settings.get("audio_bitrate", "192k")) if settings.get("keep_audio", True) else 0
+        return self.compute_target_video_bitrate(target_mb, duration, audio_kbps)
+
+    def estimate_output_size_mb(
+        self, summary: dict[str, Any] | None, settings: dict[str, Any]
+    ) -> float | None:
+        """
+        Rough output size in MB for the "≈ size" hint shown in the UI.
+
+        Target-size mode returns the requested size exactly. CRF-based video
+        encoding is estimated with a bits-per-pixel model (calibrated on x264
+        CRF 23 at 30 fps) and audio mode from its bitrate. Returns None when an
+        estimate would be meaningless (GIF, unknown input, "auto" bitrate).
+        """
+        target_mb = settings.get("target_size_mb")
+        if target_mb:
+            # A target size is exact by definition: known without the input.
+            try:
+                return float(target_mb)
+            except (TypeError, ValueError):
+                return None
+
+        if not summary:
+            return None
+
+        duration = summary.get("duration")
+        if not duration or float(duration) <= 0:
+            return None
+        duration = float(duration)
+
+        # Audio-only conversion: size is bitrate x duration.
+        if settings.get("bitrate") is not None:
+            if str(settings.get("bitrate")) == "auto":
+                return None
+            kbps = self._parse_kbps(settings.get("bitrate"))
+            return kbps * 1000 * duration / 8 / 1024 / 1024
+
+        fmt = self.VIDEO_FORMATS.get(str(settings.get("format", "")))
+        if not fmt or fmt.get("gif_mode"):
+            return None
+        bpp = BASE_BPP.get(fmt["video_codec"])
+        if bpp is None:
+            return None
+
+        crf = settings.get("crf")
+        if crf is not None:
+            with contextlib.suppress(TypeError, ValueError):
+                bpp *= 2 ** ((23.0 - float(crf)) / 6.0)
+
+        pixels = self._scale_pixels(settings.get("resolution")) or (
+            int(summary.get("width") or 0) * int(summary.get("height") or 0)
+        )
+        if not pixels:
+            return None
+
+        fps = 30.0
+        raw_fps: Any = settings.get("framerate")
+        if raw_fps:
+            with contextlib.suppress(TypeError, ValueError):
+                fps = float(raw_fps)
+
+        video_kbps = pixels * fps * bpp / 1000
+        audio_kbps = (
+            self._parse_kbps(settings.get("audio_bitrate", "192k"))
+            if settings.get("keep_audio", True)
+            else 0
+        )
+        return (video_kbps + audio_kbps) * 1000 * duration / 8 / 1024 / 1024
+
     def _get_hw_encoder(self, fmt_name: str) -> str | None:
         """Return the hardware encoder matching the software codec of `fmt_name`.
 
@@ -276,6 +541,101 @@ class FFmpegHandler:
         cpu_used = VP9_CPU_USED.get(preset, 2)
         return ["-deadline", "good", "-cpu-used", str(cpu_used)]
 
+    def _append_video_codec_args(
+        self,
+        cmd: list[str],
+        fmt: dict[str, Any],
+        settings: dict[str, Any],
+        target_kbps: int = 0,
+    ) -> None:
+        """
+        Append the video encoder and its quality/bitrate options.
+
+        Three mutually exclusive modes: target size (single-pass rate control),
+        hardware encoder (CRF-style quality knobs) or software encoder.
+        """
+        hw_encoder = self._get_hw_encoder(settings["format"]) if settings.get("hw_accel") else None
+        crf = settings.get("crf")
+
+        if target_kbps > 0:
+            # The output size is the goal, so the quality knob does not apply.
+            cmd.extend(["-c:v", hw_encoder or fmt["video_codec"]])
+            if hw_encoder and "nvenc" in hw_encoder:
+                cmd.extend(["-rc", "vbr"])
+            cmd.extend([
+                "-b:v", f"{target_kbps}k",
+                "-maxrate", f"{target_kbps * 3 // 2}k",
+                "-bufsize", f"{target_kbps * 3}k",
+            ])
+            if not hw_encoder and fmt["presets"] and settings.get("preset"):
+                cmd.extend(["-preset", settings["preset"]])
+            return
+
+        if hw_encoder:
+            cmd.extend(["-c:v", hw_encoder])
+            quality = str(crf if crf is not None else 23)
+            if "nvenc" in hw_encoder:
+                cmd.extend(["-cq", quality])
+            elif "amf" in hw_encoder:
+                # AMF needs explicit rate control: `-quality` alone ignores the
+                # quality slider, so the chosen CRF was silently discarded.
+                cmd.extend(["-quality", "balanced", "-rc", "cqp", "-qp_i", quality, "-qp_p", quality])
+            elif "qsv" in hw_encoder:
+                cmd.extend(["-global_quality", quality])
+            return
+
+        codec = fmt["video_codec"]
+        cmd.extend(["-c:v", codec])
+        if crf is not None:
+            cmd.extend(["-crf", str(crf)])
+        if codec == "libvpx-vp9":
+            # Constant-quality VP9 requires an explicit zero target bitrate;
+            # libvpx has no `-preset`, so map it to `-cpu-used`.
+            cmd.extend(["-b:v", "0"])
+            cmd.extend(self._vp9_preset_args(str(settings.get("preset", ""))))
+        elif settings.get("preset"):
+            cmd.extend(["-preset", settings["preset"]])
+
+    @staticmethod
+    def _image_quality_args(fmt: dict[str, Any], quality: int) -> list[str]:
+        """Translate the 1-100 image quality slider into encoder options."""
+        quality = max(1, min(100, int(quality)))
+        kind = fmt.get("quality")
+        if kind == "mjpeg":
+            # mjpeg uses -q:v 2 (best) .. 31 (worst): invert the slider.
+            value = round(31 - (quality - 1) * 29 / 99)
+            return ["-q:v", str(max(2, min(31, value)))]
+        if kind == "webp":
+            return ["-q:v", str(quality)]
+        if kind == "png":
+            return ["-compression_level", "6"]
+        return []
+
+    def _build_image_command(
+        self,
+        input_file: str,
+        output_file: str,
+        settings: dict[str, Any],
+        frame_time: int | float | None = None,
+    ) -> list[str] | None:
+        """Build an image command: image-to-image, or one frame from a video."""
+        fmt = self.IMAGE_FORMATS.get(str(settings.get("format", "PNG")))
+        if not fmt:
+            return None
+
+        cmd: list[str] = [self.ffmpeg_path]
+        if frame_time is not None:
+            # Seeking before -i is much faster than decoding up to that point.
+            cmd.extend(["-ss", str(frame_time)])
+        cmd.extend(["-i", input_file])
+
+        if settings.get("resolution"):
+            cmd.extend(["-vf", f"scale={settings['resolution']}:flags=lanczos"])
+        cmd.extend(["-frames:v", "1", "-an", "-c:v", fmt["image_codec"]])
+        cmd.extend(self._image_quality_args(fmt, settings.get("quality", 92)))
+        cmd.extend(["-y", output_file])
+        return cmd
+
     def build_convert_command(
         self,
         input_file: str,
@@ -288,6 +648,13 @@ class FFmpegHandler:
         resolved_input = self._resolve_path(input_file)
         if not resolved_input:
             return None
+
+        # Image mode: a still-image conversion, or a single frame exported
+        # from a video (trim_start doubles as the frame timestamp).
+        if mode == "image":
+            return self._build_image_command(
+                resolved_input, output_file, settings, frame_time=trim_start
+            )
 
         cmd: list[str] = [self.ffmpeg_path, "-i", resolved_input]
 
@@ -318,40 +685,12 @@ class FFmpegHandler:
                 )
                 cmd.extend(["-vf", vf, "-loop", "0", "-an"])
             else:
-                use_hw = settings.get("hw_accel", False)
-                if use_hw:
-                    hw_encoder = self._get_hw_encoder(settings["format"])
-                    if hw_encoder:
-                        cmd.extend(["-c:v", hw_encoder])
-                        if "nvenc" in hw_encoder:
-                            cmd.extend(["-cq", str(settings.get("crf", 23))])
-                        elif "amf" in hw_encoder:
-                            cmd.extend(["-quality", "balanced"])
-                        elif "qsv" in hw_encoder:
-                            cmd.extend(["-global_quality", str(settings.get("crf", 23))])
-                    else:
-                        # Hardware acceleration is unavailable for this format
-                        # (e.g. VP9); fall back to the software encoder.
-                        cmd.extend(["-c:v", fmt["video_codec"]])
-                        if settings.get("crf") is not None:
-                            cmd.extend(["-crf", str(settings["crf"])])
-                        if fmt["video_codec"] == "libvpx-vp9":
-                            cmd.extend(["-b:v", "0"])
-                            cmd.extend(self._vp9_preset_args(str(settings.get("preset", ""))))
-                        elif settings.get("preset"):
-                            cmd.extend(["-preset", settings["preset"]])
-                else:
-                    codec = fmt["video_codec"]
-                    cmd.extend(["-c:v", codec])
-                    if settings.get("crf") is not None:
-                        cmd.extend(["-crf", str(settings["crf"])])
-                    if codec == "libvpx-vp9":
-                        # Constant-quality VP9 requires an explicit zero target
-                        # bitrate; libvpx has no `-preset`, so map it to `-cpu-used`.
-                        cmd.extend(["-b:v", "0"])
-                        cmd.extend(self._vp9_preset_args(str(settings.get("preset", ""))))
-                    elif settings.get("preset"):
-                        cmd.extend(["-preset", settings["preset"]])
+                self._append_video_codec_args(
+                    cmd,
+                    fmt,
+                    settings,
+                    target_kbps=self.video_target_bitrate(settings, resolved_input, trim_duration),
+                )
 
                 # Apple/QuickTime compatibility for HEVC in MP4/MOV.
                 if fmt["video_codec"] == "libx265" and fmt["extension"] in (".mp4", ".mov"):
@@ -366,8 +705,14 @@ class FFmpegHandler:
                     container_audio = CONTAINER_AUDIO_CODEC.get(settings["format"], DEFAULT_AUDIO_CODEC)
                     wants_copy = bool(settings.get("copy_audio", False))
                     # Stream-copy is only safe into containers that accept the
-                    # source codec (i.e. the AAC-based ones); WebM must re-encode.
-                    if wants_copy and container_audio == DEFAULT_AUDIO_CODEC:
+                    # source codec (i.e. the AAC-based ones) and only when the
+                    # source codec itself is supported by the target container;
+                    # WebM always re-encodes.
+                    if (
+                        wants_copy
+                        and container_audio == DEFAULT_AUDIO_CODEC
+                        and self.can_copy_audio(resolved_input, settings["format"])
+                    ):
                         # Stream-copy the original audio (no re-encode, no quality loss)
                         cmd.extend(["-c:a", "copy"])
                     else:
@@ -412,6 +757,7 @@ class FFmpegHandler:
         progress_callback: ProgressCallback | None = None,
         eta_callback: EtaCallback | None = None,
     ) -> bool:
+        self._cancelled = False
         self._process = subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
@@ -471,6 +817,7 @@ class FFmpegHandler:
         return self._process.returncode == 0
 
     def cancel_conversion(self) -> bool:
+        self._cancelled = True
         if self._process and self._process.poll() is None:
             self._process.terminate()
             try:
@@ -480,11 +827,30 @@ class FFmpegHandler:
             return True
         return False
 
+    def cancel_requested(self) -> bool:
+        """True once the user cancelled, so failures are not retried."""
+        return self._cancelled
+
+    def get_ffmpeg_version(self) -> str:
+        """First line of `ffmpeg -version` (used by the bug report)."""
+        try:
+            result = subprocess.run(
+                [self.ffmpeg_path, "-version"], capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0 and result.stdout:
+                return result.stdout.splitlines()[0].strip()
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            pass
+        return ""
+
     def get_supported_video_formats(self) -> list[str]:
         return list(self.VIDEO_FORMATS.keys())
 
     def get_supported_audio_formats(self) -> list[str]:
         return list(self.AUDIO_FORMATS.keys())
+
+    def get_supported_image_formats(self) -> list[str]:
+        return list(self.IMAGE_FORMATS.keys())
 
     def get_file_summary(self, file_path: str) -> dict[str, Any] | None:
         info = self.get_media_info(file_path)

@@ -1,14 +1,22 @@
+import hashlib
 import io
 import os
 import sys
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import download_ffmpeg
-from download_ffmpeg import _extract_tar, _is_safe_member
+from download_ffmpeg import (
+    _extract_tar,
+    _is_safe_member,
+    archive_sha256,
+    resolve_archive_url,
+    verify_archive_hash,
+)
 
 
 class TestSafeMember(unittest.TestCase):
@@ -61,6 +69,40 @@ class TestExtractTarSafety(unittest.TestCase):
 
         self.assertEqual(extracted, 1)
         self.assertTrue(os.path.isfile(os.path.join(target, download_ffmpeg.FFMPEG_BIN)))
+
+
+class TestArchiveIntegrity(unittest.TestCase):
+    def test_sha256_matches_hashlib(self):
+        # Well-known digest of the empty input, as a format sanity check.
+        self.assertEqual(
+            archive_sha256(b""),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        )
+        self.assertEqual(archive_sha256(b"shuttle"), hashlib.sha256(b"shuttle").hexdigest())
+
+    def test_no_pin_accepts_anything(self):
+        self.assertTrue(verify_archive_hash(b"whatever", ""))
+
+    def test_matching_digest_is_accepted(self):
+        data = b"ffmpeg archive"
+        self.assertTrue(verify_archive_hash(data, archive_sha256(data)))
+
+    def test_digest_check_is_case_insensitive(self):
+        data = b"ffmpeg archive"
+        self.assertTrue(verify_archive_hash(data, archive_sha256(data).upper()))
+
+    def test_tampered_archive_is_rejected(self):
+        expected = archive_sha256(b"original archive")
+        self.assertFalse(verify_archive_hash(b"tampered archive", expected))
+
+    def test_default_url_uses_latest(self):
+        with patch.object(download_ffmpeg, "BUILD_TAG", ""):
+            self.assertIn("/download/latest/", resolve_archive_url())
+
+    def test_pinned_tag_is_used(self):
+        with patch.object(download_ffmpeg, "BUILD_TAG", "autobuild-2025-06-30-12-00"):
+            self.assertIn("/download/autobuild-2025-06-30-12-00/", resolve_archive_url())
+            self.assertNotIn("/download/latest/", resolve_archive_url())
 
 
 if __name__ == "__main__":

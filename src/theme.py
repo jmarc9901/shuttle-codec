@@ -236,6 +236,29 @@ def build_stylesheet() -> str:
         border-radius: 8px;
         padding: 8px;
     }}
+    /* Dialogs (QMessageBox, QFileDialog on non-native platforms).
+       Without an explicit background the dialog keeps the system's LIGHT
+       palette while inheriting the light QLabel text above, which renders
+       the message unreadable (light text on light background). */
+    QDialog {{ background-color: {BASE}; }}
+    QMessageBox {{ background-color: {MANTLE}; }}
+    QMessageBox QLabel {{
+        color: {TEXT};
+        font-size: 13px;
+    }}
+    QMessageBox QPushButton {{ min-width: 90px; }}
+    QMessageBox QPushButton:default {{
+        background-color: {ACCENT};
+        color: {CRUST};
+        border: none;
+    }}
+    QMessageBox QPushButton:default:hover {{ background-color: {SKY}; }}
+    QToolTip {{
+        background-color: {SURFACE0};
+        color: {TEXT};
+        border: 1px solid {SURFACE2};
+        padding: 4px 6px;
+    }}
     QScrollArea {{
         background-color: {BASE};
         border: none;

@@ -6,8 +6,15 @@ icon path resolution (dev vs PyInstaller-frozen) and time formatting.
 """
 
 import os
+import shutil
 import sys
+from collections.abc import Iterable
 from typing import Protocol
+
+# Still-image inputs are handled by the dedicated image conversion mode.
+IMAGE_EXTENSIONS: frozenset[str] = frozenset(
+    {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
+)
 
 
 class TimeLike(Protocol):
@@ -85,6 +92,34 @@ def open_folder(path: str) -> bool:
 def human_size(size_bytes: float) -> str:
     """Format a byte count in MB with one decimal."""
     return f"{size_bytes / 1024 / 1024:.1f} MB"
+
+
+def is_image_file(path: str) -> bool:
+    """True for still-image inputs, which use the image conversion mode."""
+    return os.path.splitext(path)[1].lower() in IMAGE_EXTENSIONS
+
+
+def filter_existing_files(paths: Iterable[str]) -> list[str]:
+    """Keep only existing files (used when restoring a persisted batch queue)."""
+    return [p for p in paths if isinstance(p, str) and os.path.isfile(p)]
+
+
+def shutdown_command() -> list[str] | None:
+    """
+    Return the platform command that powers the machine off right now.
+
+    Returns None when no supported command exists; callers must treat that
+    as "cannot shut down" rather than silently doing nothing.
+    """
+    if sys.platform == "win32":
+        return ["shutdown", "/s", "/t", "0"]
+    if sys.platform == "darwin":
+        return ["osascript", "-e", 'tell application "System Events" to shut down']
+    if shutil.which("systemctl"):
+        return ["systemctl", "poweroff"]
+    if shutil.which("shutdown"):
+        return ["shutdown", "-h", "now"]
+    return None
 
 
 def safe_int(value: str | None, default: int | None = None) -> int | None:

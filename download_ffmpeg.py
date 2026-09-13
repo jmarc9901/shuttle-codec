@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 import io
 import os
 import platform
@@ -12,24 +14,24 @@ import zipfile
 if sys.platform == "win32":
     FFMPEG_BIN = "ffmpeg.exe"
     FFPROBE_BIN = "ffprobe.exe"
-    ARCHIVE_URL = (
-        "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/"
+    ARCHIVE_URL_TEMPLATE = (
+        "https://github.com/BtbN/FFmpeg-Builds/releases/download/{tag}/"
         "ffmpeg-master-latest-win64-gpl.zip"
     )
     ARCHIVE_TYPE = "zip"
 elif sys.platform == "darwin":
     FFMPEG_BIN = "ffmpeg"
     FFPROBE_BIN = "ffprobe"
-    ARCHIVE_URL = (
-        "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/"
+    ARCHIVE_URL_TEMPLATE = (
+        "https://github.com/BtbN/FFmpeg-Builds/releases/download/{tag}/"
         "ffmpeg-master-latest-macos64-gpl.zip"
     )
     ARCHIVE_TYPE = "zip"
 else:  # Linux
     FFMPEG_BIN = "ffmpeg"
     FFPROBE_BIN = "ffprobe"
-    ARCHIVE_URL = (
-        "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/"
+    ARCHIVE_URL_TEMPLATE = (
+        "https://github.com/BtbN/FFmpeg-Builds/releases/download/{tag}/"
         "ffmpeg-master-latest-linux64-gpl.tar.xz"
     )
     ARCHIVE_TYPE = "tar.xz"
@@ -37,6 +39,30 @@ else:  # Linux
 TARGET_DIR = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "resources", "bin"
 )
+
+# Optional pinning, for reproducible and tamper-evident builds:
+#   FFMPEG_BUILD_TAG=autobuild-2025-06-30-12-00
+#   FFMPEG_ARCHIVE_SHA256=<sha256 of that archive>
+# Without a tag the newest "latest" build is downloaded. Without a digest the
+# hash of the archive is printed so it can be recorded and pinned later.
+BUILD_TAG = os.environ.get("FFMPEG_BUILD_TAG", "").strip()
+EXPECTED_SHA256 = os.environ.get("FFMPEG_ARCHIVE_SHA256", "").strip().lower()
+
+
+def resolve_archive_url() -> str:
+    """URL of the archive to download (pinned build tag when provided)."""
+    return ARCHIVE_URL_TEMPLATE.format(tag=BUILD_TAG or "latest")
+
+
+def archive_sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest().lower()
+
+
+def verify_archive_hash(data: bytes, expected: str) -> bool:
+    """True when the archive matches `expected` (an empty value means no pin)."""
+    if not expected:
+        return True
+    return hmac.compare_digest(archive_sha256(data), expected.strip().lower())
 
 
 def _create_ssl_context() -> ssl.SSLContext:
@@ -181,11 +207,14 @@ def _try_package_manager() -> bool:
 def main() -> None:
     os.makedirs(TARGET_DIR, exist_ok=True)
 
+    archive_url = resolve_archive_url()
     print(f"Downloading FFmpeg for {platform.system()}...")
-    print("URL: " + ARCHIVE_URL)
+    print("URL: " + archive_url)
+    if not BUILD_TAG:
+        print("Note: no FFMPEG_BUILD_TAG set, using the newest 'latest' build.")
 
     ctx = _create_ssl_context()
-    total = _get_file_size(ARCHIVE_URL, ctx)
+    total = _get_file_size(archive_url, ctx)
 
     if total:
         print(f"File size: {total // 1024 // 1024} MB")
@@ -194,7 +223,7 @@ def main() -> None:
 
     print("Starting download (this may take a few minutes)...")
     try:
-        buffer = _download_file(ARCHIVE_URL, ctx, total)
+        buffer = _download_file(archive_url, ctx, total)
     except Exception as e:
         print(f"\nDownload failed: {e}")
         if sys.platform != "win32":
@@ -205,6 +234,13 @@ def main() -> None:
         print("\nPlease install FFmpeg manually:")
         print("  macOS: brew install ffmpeg")
         print("  Linux: sudo apt install ffmpeg  (or your package manager)")
+        sys.exit(1)
+
+    data = buffer.getvalue()
+    print(f"Archive SHA-256: {archive_sha256(data)}")
+    if not verify_archive_hash(data, EXPECTED_SHA256):
+        print("\nERROR: the archive does not match FFMPEG_ARCHIVE_SHA256.")
+        print("       Refusing to extract a possibly tampered download.")
         sys.exit(1)
 
     extracted = _extract_zip(buffer, TARGET_DIR) if ARCHIVE_TYPE == "zip" else _extract_tar(buffer, TARGET_DIR)

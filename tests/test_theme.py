@@ -16,6 +16,7 @@ from src.theme import (
     SURFACE0,
     SURFACE1,
     SURFACE2,
+    TEXT,
     WARNING,
     build_stylesheet,
     color_map,
@@ -61,6 +62,18 @@ class TestTheme(unittest.TestCase):
         css = build_stylesheet()
         for color in (BASE, SURFACE0, SURFACE1, ACCENT, SUCCESS, DANGER):
             self.assertIn(color, css)
+
+    def test_dialog_rules_keep_text_readable(self):
+        # Regression: the "conversion finished" message box inherited the light
+        # QLabel text but kept the platform's light dialog background.
+        css = build_stylesheet()
+        self.assertIn("QMessageBox", css)
+        self.assertIn(f"QMessageBox {{ background-color: {MANTLE}; }}", css)
+        self.assertIn(f"QDialog {{ background-color: {BASE}; }}", css)
+
+        label_block = re.search(r"QMessageBox QLabel \{(.*?)\}", css, re.DOTALL)
+        self.assertIsNotNone(label_block)
+        self.assertIn(f"color: {TEXT}", label_block.group(1))
 
     def test_stylesheet_is_deterministic(self):
         self.assertEqual(build_stylesheet(), build_stylesheet())
